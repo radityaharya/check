@@ -64,21 +64,31 @@ func main() {
 	}
 	defer database.Close()
 
-	// Load webhook URL from database or environment variable
+	// Load notification settings from database or environment variables
 	webhookURL := os.Getenv("DISCORD_WEBHOOK_URL")
 	if dbWebhook, err := database.GetSetting("discord_webhook_url"); err == nil && dbWebhook != "" {
 		webhookURL = dbWebhook
 	}
 
-	discordNotifier := notifier.NewDiscordNotifier(webhookURL)
-	engine := checker.NewEngine(database, discordNotifier)
+	gotifyServerURL, _ := database.GetSetting("gotify_server_url")
+	gotifyToken, _ := database.GetSetting("gotify_token")
+
+	var notifiers []notifier.Notifier
+	if webhookURL != "" {
+		notifiers = append(notifiers, notifier.NewDiscordNotifier(webhookURL))
+	}
+	if gotifyServerURL != "" && gotifyToken != "" {
+		notifiers = append(notifiers, notifier.NewGotifyNotifier(gotifyServerURL, gotifyToken))
+	}
+
+	engine := checker.NewEngine(database, notifiers)
 
 	if err := engine.Start(); err != nil {
 		log.Fatalf("Failed to start check engine: %v", err)
 	}
 	defer engine.Stop()
 
-	handlers := api.NewHandlers(database, engine, discordNotifier)
+	handlers := api.NewHandlers(database, engine, notifiers)
 
 	router := mux.NewRouter()
 
@@ -92,6 +102,7 @@ func main() {
 	router.HandleFunc("/api/settings", handlers.GetSettings).Methods("GET")
 	router.HandleFunc("/api/settings", handlers.UpdateSettings).Methods("PUT")
 	router.HandleFunc("/api/settings/test-webhook", handlers.TestWebhook).Methods("POST")
+	router.HandleFunc("/api/settings/test-gotify", handlers.TestGotify).Methods("POST")
 	router.HandleFunc("/api/settings/test-tailscale", handlers.TestTailscale).Methods("POST")
 	router.HandleFunc("/api/tailscale/devices", handlers.GetTailscaleDevices).Methods("GET")
 	router.HandleFunc("/api/groups", handlers.GetGroups).Methods("GET")

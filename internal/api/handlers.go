@@ -18,20 +18,17 @@ import (
 type Handlers struct {
 	db       *db.Database
 	engine   *checker.Engine
-	notifier *notifier.DiscordNotifier
+	notifiers []notifier.Notifier
 }
 
-func NewHandlers(database *db.Database, engine *checker.Engine, discordNotifier *notifier.DiscordNotifier) *Handlers {
+func NewHandlers(database *db.Database, engine *checker.Engine, notifiers []notifier.Notifier) *Handlers {
 	return &Handlers{
 		db:       database,
 		engine:   engine,
-		notifier: discordNotifier,
+		notifiers: notifiers,
 	}
 }
 
-func (h *Handlers) SetNotifier(n *notifier.DiscordNotifier) {
-	h.notifier = n
-}
 
 func (h *Handlers) GetChecks(w http.ResponseWriter, r *http.Request) {
 	checks, err := h.db.GetAllChecks()
@@ -289,11 +286,15 @@ func (h *Handlers) GetStats(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) GetSettings(w http.ResponseWriter, r *http.Request) {
 	webhookURL, _ := h.db.GetSetting("discord_webhook_url")
+	gotifyServerURL, _ := h.db.GetSetting("gotify_server_url")
+	gotifyToken, _ := h.db.GetSetting("gotify_token")
 	tailscaleAPIKey, _ := h.db.GetSetting("tailscale_api_key")
 	tailscaleTailnet, _ := h.db.GetSetting("tailscale_tailnet")
 
 	settings := models.Settings{
 		DiscordWebhookURL:  webhookURL,
+		GotifyServerURL:    gotifyServerURL,
+		GotifyToken:        gotifyToken,
 		TailscaleAPIKey:    tailscaleAPIKey,
 		TailscaleTailnet:   tailscaleTailnet,
 	}
@@ -313,6 +314,14 @@ func (h *Handlers) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if err := h.db.SetSetting("gotify_server_url", settings.GotifyServerURL); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := h.db.SetSetting("gotify_token", settings.GotifyToken); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	if err := h.db.SetSetting("tailscale_api_key", settings.TailscaleAPIKey); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -322,20 +331,60 @@ func (h *Handlers) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.notifier = notifier.NewDiscordNotifier(settings.DiscordWebhookURL)
-	h.engine.UpdateNotifier(settings.DiscordWebhookURL)
+	var notifiers []notifier.Notifier
+	if settings.DiscordWebhookURL != "" {
+		notifiers = append(notifiers, notifier.NewDiscordNotifier(settings.DiscordWebhookURL))
+	}
+	if settings.GotifyServerURL != "" && settings.GotifyToken != "" {
+		notifiers = append(notifiers, notifier.NewGotifyNotifier(settings.GotifyServerURL, settings.GotifyToken))
+	}
+	h.notifiers = notifiers
+	h.engine.UpdateNotifiers(notifiers)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(settings)
 }
 
 func (h *Handlers) TestWebhook(w http.ResponseWriter, r *http.Request) {
-	if h.notifier == nil {
-		http.Error(w, "notifier not configured", http.StatusBadRequest)
+	var discordNotifier *notifier.DiscordNotifier
+	for _, n := range h.notifiers {
+		if dn, ok := n.(*notifier.DiscordNotifier); ok {
+			discordNotifier = dn
+			break
+		}
+	}
+
+	if discordNotifier == nil {
+		http.Error(w, "discord notifier not configured", http.StatusBadRequest)
 		return
 	}
 
-	if err := h.notifier.TestWebhook(); err != nil {
+	if err := discordNotifier.TestWebhook(); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "Test notification sent successfully"})
+}
+
+func (h *Handlers) TestGotify(w http.ResponseWriter, r *http.Request) {
+	var gotifyNotifier *notifier.GotifyNotifier
+	for _, n := range h.notifiers {
+		if gn, ok := n.(*notifier.GotifyNotifier); ok {
+			gotifyNotifier = gn
+			break
+		}
+	}
+
+	if gotifyNotifier == nil {
+		http.Error(w, "gotify notifier not configured", http.StatusBadRequest)
+		return
+	}
+
+	if err := gotifyNotifier.TestWebhook(); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})

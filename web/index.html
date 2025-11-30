@@ -695,13 +695,16 @@
 
     <!-- Settings Modal -->
     <div x-show="showSettingsModal" x-cloak
-      class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50" x-transition.opacity
+      class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" x-transition.opacity
       @click.self="showSettingsModal = false">
-      <div class="bg-terminal-surface border border-terminal-border rounded-lg shadow-2xl p-8 w-full max-w-lg"
+      <div class="bg-terminal-surface border border-terminal-border rounded-lg shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col"
         @click.stop>
-        <h3 class="text-lg font-bold text-terminal-green mb-6 flex items-center gap-2"><span
-            class="text-terminal-muted">$</span> settings</h3>
-        <div class="space-y-6">
+        <div class="p-8 pb-4 flex-shrink-0">
+          <h3 class="text-lg font-bold text-terminal-green flex items-center gap-2"><span
+              class="text-terminal-muted">$</span> settings</h3>
+        </div>
+        <div class="px-8 pb-4 overflow-y-auto flex-1">
+          <div class="space-y-6">
           <div class="text-xs text-terminal-muted uppercase tracking-widest mb-2">Discord Notifications</div>
           <div>
             <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Webhook URL</label>
@@ -722,6 +725,37 @@
           <div x-show="webhookTestResult" class="text-sm p-3 rounded"
             :class="webhookTestResult?.success ? 'bg-terminal-green/20 text-terminal-green' : 'bg-terminal-red/20 text-terminal-red'"
             x-text="webhookTestResult?.message"></div>
+
+          <div class="border-t border-terminal-border pt-6 mt-6">
+            <div class="text-xs text-terminal-muted uppercase tracking-widest mb-2">Gotify Notifications</div>
+            <div class="space-y-4">
+              <div>
+                <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Server URL</label>
+                <input type="url" x-model="settings.gotify_server_url"
+                  class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
+                  placeholder="https://gotify.example.com">
+              </div>
+              <div>
+                <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">App Token</label>
+                <input type="password" x-model="settings.gotify_token"
+                  class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
+                  placeholder="Axxxxxxxxxxxxx">
+              </div>
+              <button type="button" @click="testGotify()" :disabled="testingGotify || !settings.gotify_server_url || !settings.gotify_token"
+                class="w-full bg-terminal-border text-terminal-text px-4 py-3 rounded font-bold hover:bg-terminal-muted transition text-sm uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                <template x-if="testingGotify"><svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                    </path>
+                  </svg></template>
+                <span x-text="testingGotify ? 'Sending...' : 'Test Gotify'"></span>
+              </button>
+              <div x-show="gotifyTestResult" class="text-sm p-3 rounded"
+                :class="gotifyTestResult?.success ? 'bg-terminal-green/20 text-terminal-green' : 'bg-terminal-red/20 text-terminal-red'"
+                x-text="gotifyTestResult?.message"></div>
+            </div>
+          </div>
 
           <div class="border-t border-terminal-border pt-6 mt-6">
             <div class="text-xs text-terminal-cyan uppercase tracking-widest mb-4">Tailscale Integration</div>
@@ -755,8 +789,9 @@
                 x-text="tailscaleTestResult?.message"></div>
             </div>
           </div>
+          </div>
         </div>
-        <div class="mt-8 flex gap-4">
+        <div class="p-8 pt-4 flex gap-4 flex-shrink-0 border-t border-terminal-border">
           <button @click="saveSettings()"
             class="flex-1 bg-terminal-green text-terminal-bg px-4 py-3 rounded font-bold hover:opacity-90 transition text-sm uppercase tracking-wide">Save
             Settings</button>
@@ -843,9 +878,11 @@
         isLive: true,
         expandedChecks: [],
         expandedGroups: [],
-        settings: { discord_webhook_url: '', tailscale_api_key: '', tailscale_tailnet: '' },
+        settings: { discord_webhook_url: '', gotify_server_url: '', gotify_token: '', tailscale_api_key: '', tailscale_tailnet: '' },
         testingWebhook: false,
         webhookTestResult: null,
+        testingGotify: false,
+        gotifyTestResult: null,
         testingTailscale: false,
         tailscaleTestResult: null,
         tailscaleDevices: [],
@@ -908,6 +945,7 @@
             if (!response.ok) throw new Error('Failed to save settings');
             this.showSettingsModal = false;
             this.webhookTestResult = null;
+            this.gotifyTestResult = null;
           } catch (error) { alert('Failed to save settings: ' + error.message); }
         },
 
@@ -922,6 +960,19 @@
             const data = await response.json();
             this.webhookTestResult = response.ok ? { success: true, message: 'Test notification sent!' } : { success: false, message: data.error || 'Failed' };
           } catch (error) { this.webhookTestResult = { success: false, message: error.message }; } finally { this.testingWebhook = false; }
+        },
+
+        async testGotify() {
+          this.testingGotify = true;
+          this.gotifyTestResult = null;
+          try {
+            await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(this.settings) });
+          } catch (e) { }
+          try {
+            const response = await fetch('/api/settings/test-gotify', { method: 'POST' });
+            const data = await response.json();
+            this.gotifyTestResult = response.ok ? { success: true, message: 'Test notification sent!' } : { success: false, message: data.error || 'Failed' };
+          } catch (error) { this.gotifyTestResult = { success: false, message: error.message }; } finally { this.testingGotify = false; }
         },
 
         async testTailscale() {

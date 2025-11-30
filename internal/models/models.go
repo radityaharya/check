@@ -242,6 +242,8 @@ type UpdateTagRequest struct {
 
 type Settings struct {
 	DiscordWebhookURL  string `json:"discord_webhook_url"`
+	GotifyServerURL    string `json:"gotify_server_url"`
+	GotifyToken        string `json:"gotify_token"`
 	TailscaleAPIKey    string `json:"tailscale_api_key"`
 	TailscaleTailnet   string `json:"tailscale_tailnet"`
 }

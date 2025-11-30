@@ -23,13 +23,13 @@ import (
 )
 
 type Engine struct {
-	db       *db.Database
-	notifier *notifier.DiscordNotifier
-	checks   map[int64]*checkState
-	mu       sync.RWMutex
-	ctx      context.Context
-	cancel   context.CancelFunc
-	wg       sync.WaitGroup
+	db        *db.Database
+	notifiers []notifier.Notifier
+	checks    map[int64]*checkState
+	mu        sync.RWMutex
+	ctx       context.Context
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
 }
 
 type checkState struct {
@@ -39,14 +39,14 @@ type checkState struct {
 	stop       chan struct{}
 }
 
-func NewEngine(database *db.Database, discordNotifier *notifier.DiscordNotifier) *Engine {
+func NewEngine(database *db.Database, notifiers []notifier.Notifier) *Engine {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Engine{
-		db:       database,
-		notifier: discordNotifier,
-		checks:   make(map[int64]*checkState),
-		ctx:      ctx,
-		cancel:   cancel,
+		db:        database,
+		notifiers: notifiers,
+		checks:    make(map[int64]*checkState),
+		ctx:       ctx,
+		cancel:    cancel,
 	}
 }
 
@@ -74,8 +74,10 @@ func (e *Engine) Stop() {
 	e.wg.Wait()
 }
 
-func (e *Engine) UpdateNotifier(webhookURL string) {
-	e.notifier = notifier.NewDiscordNotifier(webhookURL)
+func (e *Engine) UpdateNotifiers(notifiers []notifier.Notifier) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.notifiers = notifiers
 }
 
 func (e *Engine) AddCheck(check models.Check) {
@@ -174,14 +176,21 @@ func (e *Engine) performCheck(state *checkState) {
 	}
 
 	if statusChanged {
-		e.notifier.SendStatusChange(
-			check.Name,
-			e.getCheckTarget(check),
-			history.Success,
-			history.StatusCode,
-			history.ResponseTimeMs,
-			history.ErrorMessage,
-		)
+		e.mu.RLock()
+		notifiers := e.notifiers
+		e.mu.RUnlock()
+		for _, n := range notifiers {
+			if n != nil {
+				n.SendStatusChange(
+					check.Name,
+					e.getCheckTarget(check),
+					history.Success,
+					history.StatusCode,
+					history.ResponseTimeMs,
+					history.ErrorMessage,
+				)
+			}
+		}
 	}
 
 	state.lastStatus = &history
