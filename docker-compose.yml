@@ -1,0 +1,14 @@
+services:
+  gocheck:
+    build: .
+    container_name: gocheck
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+      - ./config.yaml:/app/config.yaml:ro
+    environment:
+      - TZ=Asia/Jakarta
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
+

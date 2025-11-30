@@ -1,0 +1,8 @@
+*.db
+data/
+.git
+.gitignore
+*.md
+import.json
+cmd/
+
