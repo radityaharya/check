@@ -44,6 +44,42 @@ func (f FlexibleInt64) MarshalJSON() ([]byte, error) {
 	return json.Marshal(*f.Value)
 }
 
+// FlexibleInt handles int values that might come as strings from JSON
+type FlexibleInt struct {
+	Value int
+	Set   bool
+}
+
+func (f *FlexibleInt) UnmarshalJSON(data []byte) error {
+	f.Set = true
+	var i int
+	if err := json.Unmarshal(data, &i); err == nil {
+		f.Value = i
+		return nil
+	}
+
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		if s == "" {
+			f.Value = 0
+			f.Set = false
+			return nil
+		}
+		i, err := strconv.Atoi(s)
+		if err != nil {
+			return err
+		}
+		f.Value = i
+		return nil
+	}
+
+	return nil
+}
+
+func (f FlexibleInt) MarshalJSON() ([]byte, error) {
+	return json.Marshal(f.Value)
+}
+
 const (
 	CheckTypeHTTP      CheckType = "http"
 	CheckTypePing      CheckType = "ping"
@@ -142,8 +178,8 @@ type CreateCheckRequest struct {
 	Name                string         `json:"name"`
 	Type                CheckType      `json:"type"`
 	URL                 string         `json:"url,omitempty"`
-	IntervalSeconds     int            `json:"interval_seconds"`
-	TimeoutSeconds      int            `json:"timeout_seconds"`
+	IntervalSeconds     FlexibleInt    `json:"interval_seconds"`
+	TimeoutSeconds      FlexibleInt    `json:"timeout_seconds"`
 	Enabled             bool           `json:"enabled"`
 	GroupID             FlexibleInt64  `json:"group_id,omitempty"`
 	TagIDs              []int64        `json:"tag_ids,omitempty"`
@@ -165,8 +201,8 @@ type UpdateCheckRequest struct {
 	Name                *string        `json:"name,omitempty"`
 	Type                *CheckType     `json:"type,omitempty"`
 	URL                 *string        `json:"url,omitempty"`
-	IntervalSeconds     *int           `json:"interval_seconds,omitempty"`
-	TimeoutSeconds      *int           `json:"timeout_seconds,omitempty"`
+	IntervalSeconds     FlexibleInt    `json:"interval_seconds,omitempty"`
+	TimeoutSeconds      FlexibleInt    `json:"timeout_seconds,omitempty"`
 	Enabled             *bool          `json:"enabled,omitempty"`
 	GroupID             FlexibleInt64  `json:"group_id,omitempty"`
 	TagIDs              *[]int64       `json:"tag_ids,omitempty"`

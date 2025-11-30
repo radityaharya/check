@@ -79,19 +79,21 @@ func (h *Handlers) CreateCheck(w http.ResponseWriter, r *http.Request) {
 		req.Type = models.CheckTypeHTTP
 	}
 
-	if req.IntervalSeconds <= 0 {
-		req.IntervalSeconds = 60
+	intervalSeconds := req.IntervalSeconds.Value
+	if intervalSeconds <= 0 {
+		intervalSeconds = 60
 	}
-	if req.TimeoutSeconds <= 0 {
-		req.TimeoutSeconds = 10
+	timeoutSeconds := req.TimeoutSeconds.Value
+	if timeoutSeconds <= 0 {
+		timeoutSeconds = 10
 	}
 
 	check := models.Check{
 		Name:                req.Name,
 		Type:                req.Type,
 		URL:                 req.URL,
-		IntervalSeconds:     req.IntervalSeconds,
-		TimeoutSeconds:      req.TimeoutSeconds,
+		IntervalSeconds:     intervalSeconds,
+		TimeoutSeconds:      timeoutSeconds,
 		Enabled:             req.Enabled,
 		GroupID:             req.GroupID.Value,
 		ExpectedStatusCodes: req.ExpectedStatusCodes,
@@ -168,11 +170,11 @@ func (h *Handlers) UpdateCheck(w http.ResponseWriter, r *http.Request) {
 	if req.URL != nil {
 		check.URL = *req.URL
 	}
-	if req.IntervalSeconds != nil {
-		check.IntervalSeconds = *req.IntervalSeconds
+	if req.IntervalSeconds.Set {
+		check.IntervalSeconds = req.IntervalSeconds.Value
 	}
-	if req.TimeoutSeconds != nil {
-		check.TimeoutSeconds = *req.TimeoutSeconds
+	if req.TimeoutSeconds.Set {
+		check.TimeoutSeconds = req.TimeoutSeconds.Value
 	}
 	if req.Enabled != nil {
 		check.Enabled = *req.Enabled
