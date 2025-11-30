@@ -45,11 +45,12 @@ func (f FlexibleInt64) MarshalJSON() ([]byte, error) {
 }
 
 const (
-	CheckTypeHTTP     CheckType = "http"
-	CheckTypePing     CheckType = "ping"
-	CheckTypePostgres CheckType = "postgres"
-	CheckTypeJSONHTTP CheckType = "json_http"
-	CheckTypeDNS      CheckType = "dns"
+	CheckTypeHTTP      CheckType = "http"
+	CheckTypePing      CheckType = "ping"
+	CheckTypePostgres  CheckType = "postgres"
+	CheckTypeJSONHTTP  CheckType = "json_http"
+	CheckTypeDNS       CheckType = "dns"
+	CheckTypeTailscale CheckType = "tailscale"
 )
 
 type Group struct {
@@ -97,6 +98,9 @@ type Check struct {
 	DNSHostname      string `json:"dns_hostname,omitempty"`
 	DNSRecordType    string `json:"dns_record_type,omitempty"`
 	ExpectedDNSValue string `json:"expected_dns_value,omitempty"`
+
+	// Tailscale specific
+	TailscaleDeviceID string `json:"tailscale_device_id,omitempty"`
 }
 
 type CheckHistory struct {
@@ -154,6 +158,7 @@ type CreateCheckRequest struct {
 	DNSHostname         string         `json:"dns_hostname,omitempty"`
 	DNSRecordType       string         `json:"dns_record_type,omitempty"`
 	ExpectedDNSValue    string         `json:"expected_dns_value,omitempty"`
+	TailscaleDeviceID   string         `json:"tailscale_device_id,omitempty"`
 }
 
 type UpdateCheckRequest struct {
@@ -176,6 +181,7 @@ type UpdateCheckRequest struct {
 	DNSHostname         *string        `json:"dns_hostname,omitempty"`
 	DNSRecordType       *string        `json:"dns_record_type,omitempty"`
 	ExpectedDNSValue    *string        `json:"expected_dns_value,omitempty"`
+	TailscaleDeviceID   *string        `json:"tailscale_device_id,omitempty"`
 }
 
 type CreateGroupRequest struct {
@@ -199,5 +205,7 @@ type UpdateTagRequest struct {
 }
 
 type Settings struct {
-	DiscordWebhookURL string `json:"discord_webhook_url"`
+	DiscordWebhookURL  string `json:"discord_webhook_url"`
+	TailscaleAPIKey    string `json:"tailscale_api_key"`
+	TailscaleTailnet   string `json:"tailscale_tailnet"`
 }

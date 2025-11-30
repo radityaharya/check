@@ -4,7 +4,7 @@ services:
     container_name: gocheck
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "100.101.101.102:8080:8080"
     volumes:
       - ./data:/data
       - ./config.yaml:/app/config.yaml:ro

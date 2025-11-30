@@ -19,6 +19,7 @@ import (
 	"gocheck/internal/db"
 	"gocheck/internal/models"
 	"gocheck/internal/notifier"
+	tailscale "tailscale.com/client/tailscale/v2"
 )
 
 type Engine struct {
@@ -157,6 +158,8 @@ func (e *Engine) performCheck(state *checkState) {
 		e.performJSONHTTPCheck(&check, &history, start)
 	case models.CheckTypeDNS:
 		e.performDNSCheck(&check, &history, start)
+	case models.CheckTypeTailscale:
+		e.performTailscaleCheck(&check, &history, start)
 	default:
 		e.performHTTPCheck(&check, &history, start)
 	}
@@ -192,6 +195,8 @@ func (e *Engine) getCheckTarget(check models.Check) string {
 		return "PostgreSQL: " + check.Name
 	case models.CheckTypeDNS:
 		return check.DNSHostname
+	case models.CheckTypeTailscale:
+		return "Tailscale: " + check.TailscaleDeviceID
 	default:
 		return check.URL
 	}
@@ -587,4 +592,64 @@ func (e *Engine) CheckConnectivity(checkType models.CheckType, target string, ti
 	default:
 		return false, "unknown check type", 0
 	}
+}
+
+func (e *Engine) performTailscaleCheck(check *models.Check, history *models.CheckHistory, start time.Time) {
+	if check.TailscaleDeviceID == "" {
+		history.Success = false
+		history.ErrorMessage = "no device ID specified"
+		history.ResponseTimeMs = int(time.Since(start).Milliseconds())
+		return
+	}
+
+	apiKey, _ := e.db.GetSetting("tailscale_api_key")
+	tailnet, _ := e.db.GetSetting("tailscale_tailnet")
+
+	if apiKey == "" || tailnet == "" {
+		history.Success = false
+		history.ErrorMessage = "Tailscale API key or tailnet not configured"
+		history.ResponseTimeMs = int(time.Since(start).Milliseconds())
+		return
+	}
+
+	client := &tailscale.Client{
+		Tailnet: tailnet,
+		APIKey:  apiKey,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(check.TimeoutSeconds)*time.Second)
+	defer cancel()
+
+	device, err := client.Devices().Get(ctx, check.TailscaleDeviceID)
+	history.ResponseTimeMs = int(time.Since(start).Milliseconds())
+
+	if err != nil {
+		history.Success = false
+		history.ErrorMessage = fmt.Sprintf("API error: %v", err)
+		return
+	}
+
+	// Check if device is online via connectedToControl
+	if device.ConnectedToControl {
+		history.Success = true
+		history.ResponseBody = fmt.Sprintf("Online - %s (%s)", device.Hostname, strings.Join(device.Addresses, ", "))
+		return
+	}
+
+	// Check lastSeen - if within 5 minutes, consider online
+	lastSeenTime := device.LastSeen.Time
+	if !lastSeenTime.IsZero() {
+		lastSeenDuration := time.Since(lastSeenTime)
+		if lastSeenDuration < 5*time.Minute {
+			history.Success = true
+			history.ResponseBody = fmt.Sprintf("Online (last seen %s ago) - %s", lastSeenDuration.Round(time.Second), device.Hostname)
+			return
+		}
+		history.Success = false
+		history.ErrorMessage = fmt.Sprintf("Device offline - last seen %s ago", lastSeenDuration.Round(time.Second))
+		return
+	}
+
+	history.Success = false
+	history.ErrorMessage = "Device status unknown"
 }

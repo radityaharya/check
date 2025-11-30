@@ -153,6 +153,7 @@ func (d *Database) migrateSchema() {
 		{"dns_record_type", "NULL"},
 		{"expected_dns_value", "NULL"},
 		{"group_id", "NULL"},
+		{"tailscale_device_id", "NULL"},
 	}
 
 	for _, col := range columns {
@@ -193,7 +194,7 @@ func (d *Database) GetAllChecks() ([]models.Check, error) {
 		SELECT id, name, COALESCE(type, 'http'), COALESCE(url, ''), interval_seconds, timeout_seconds, enabled, created_at,
 			COALESCE(expected_status_codes, '[200]'), COALESCE(method, 'GET'), COALESCE(json_path, ''), COALESCE(expected_json_value, ''),
 			COALESCE(postgres_conn_string, ''), COALESCE(postgres_query, ''), COALESCE(expected_query_value, ''), COALESCE(host, ''),
-			COALESCE(dns_hostname, ''), COALESCE(dns_record_type, ''), COALESCE(expected_dns_value, ''), group_id
+			COALESCE(dns_hostname, ''), COALESCE(dns_record_type, ''), COALESCE(expected_dns_value, ''), group_id, COALESCE(tailscale_device_id, '')
 		FROM checks
 		ORDER BY created_at DESC
 	`)
@@ -210,7 +211,7 @@ func (d *Database) GetAllChecks() ([]models.Check, error) {
 		if err := rows.Scan(&c.ID, &c.Name, &c.Type, &c.URL, &c.IntervalSeconds, &c.TimeoutSeconds, &c.Enabled, &c.CreatedAt,
 			&statusCodesJSON, &c.Method, &c.JSONPath, &c.ExpectedJSONValue,
 			&c.PostgresConnString, &c.PostgresQuery, &c.ExpectedQueryValue, &c.Host,
-			&c.DNSHostname, &c.DNSRecordType, &c.ExpectedDNSValue, &groupID); err != nil {
+			&c.DNSHostname, &c.DNSRecordType, &c.ExpectedDNSValue, &groupID, &c.TailscaleDeviceID); err != nil {
 			return nil, err
 		}
 		c.ExpectedStatusCodes = d.parseStatusCodes(statusCodesJSON)
@@ -232,13 +233,13 @@ func (d *Database) GetCheck(id int64) (*models.Check, error) {
 		SELECT id, name, COALESCE(type, 'http'), COALESCE(url, ''), interval_seconds, timeout_seconds, enabled, created_at,
 			COALESCE(expected_status_codes, '[200]'), COALESCE(method, 'GET'), COALESCE(json_path, ''), COALESCE(expected_json_value, ''),
 			COALESCE(postgres_conn_string, ''), COALESCE(postgres_query, ''), COALESCE(expected_query_value, ''), COALESCE(host, ''),
-			COALESCE(dns_hostname, ''), COALESCE(dns_record_type, ''), COALESCE(expected_dns_value, ''), group_id
+			COALESCE(dns_hostname, ''), COALESCE(dns_record_type, ''), COALESCE(expected_dns_value, ''), group_id, COALESCE(tailscale_device_id, '')
 		FROM checks
 		WHERE id = ?
 	`, id).Scan(&c.ID, &c.Name, &c.Type, &c.URL, &c.IntervalSeconds, &c.TimeoutSeconds, &c.Enabled, &c.CreatedAt,
 		&statusCodesJSON, &c.Method, &c.JSONPath, &c.ExpectedJSONValue,
 		&c.PostgresConnString, &c.PostgresQuery, &c.ExpectedQueryValue, &c.Host,
-		&c.DNSHostname, &c.DNSRecordType, &c.ExpectedDNSValue, &groupID)
+		&c.DNSHostname, &c.DNSRecordType, &c.ExpectedDNSValue, &groupID, &c.TailscaleDeviceID)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -261,12 +262,12 @@ func (d *Database) CreateCheck(c *models.Check) error {
 		INSERT INTO checks (name, type, url, interval_seconds, timeout_seconds, enabled,
 			expected_status_codes, method, json_path, expected_json_value,
 			postgres_conn_string, postgres_query, expected_query_value, host,
-			dns_hostname, dns_record_type, expected_dns_value, group_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			dns_hostname, dns_record_type, expected_dns_value, group_id, tailscale_device_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, c.Name, c.Type, c.URL, c.IntervalSeconds, c.TimeoutSeconds, c.Enabled,
 		statusCodesJSON, c.Method, c.JSONPath, c.ExpectedJSONValue,
 		c.PostgresConnString, c.PostgresQuery, c.ExpectedQueryValue, c.Host,
-		c.DNSHostname, c.DNSRecordType, c.ExpectedDNSValue, c.GroupID)
+		c.DNSHostname, c.DNSRecordType, c.ExpectedDNSValue, c.GroupID, c.TailscaleDeviceID)
 	if err != nil {
 		return err
 	}
@@ -288,12 +289,12 @@ func (d *Database) UpdateCheck(c *models.Check) error {
 		SET name = ?, type = ?, url = ?, interval_seconds = ?, timeout_seconds = ?, enabled = ?,
 			expected_status_codes = ?, method = ?, json_path = ?, expected_json_value = ?,
 			postgres_conn_string = ?, postgres_query = ?, expected_query_value = ?, host = ?,
-			dns_hostname = ?, dns_record_type = ?, expected_dns_value = ?, group_id = ?
+			dns_hostname = ?, dns_record_type = ?, expected_dns_value = ?, group_id = ?, tailscale_device_id = ?
 		WHERE id = ?
 	`, c.Name, c.Type, c.URL, c.IntervalSeconds, c.TimeoutSeconds, c.Enabled,
 		statusCodesJSON, c.Method, c.JSONPath, c.ExpectedJSONValue,
 		c.PostgresConnString, c.PostgresQuery, c.ExpectedQueryValue, c.Host,
-		c.DNSHostname, c.DNSRecordType, c.ExpectedDNSValue, c.GroupID, c.ID)
+		c.DNSHostname, c.DNSRecordType, c.ExpectedDNSValue, c.GroupID, c.TailscaleDeviceID, c.ID)
 	return err
 }
 
@@ -307,7 +308,7 @@ func (d *Database) GetEnabledChecks() ([]models.Check, error) {
 		SELECT id, name, COALESCE(type, 'http'), COALESCE(url, ''), interval_seconds, timeout_seconds, enabled, created_at,
 			COALESCE(expected_status_codes, '[200]'), COALESCE(method, 'GET'), COALESCE(json_path, ''), COALESCE(expected_json_value, ''),
 			COALESCE(postgres_conn_string, ''), COALESCE(postgres_query, ''), COALESCE(expected_query_value, ''), COALESCE(host, ''),
-			COALESCE(dns_hostname, ''), COALESCE(dns_record_type, ''), COALESCE(expected_dns_value, ''), group_id
+			COALESCE(dns_hostname, ''), COALESCE(dns_record_type, ''), COALESCE(expected_dns_value, ''), group_id, COALESCE(tailscale_device_id, '')
 		FROM checks
 		WHERE enabled = 1
 	`)
@@ -324,7 +325,7 @@ func (d *Database) GetEnabledChecks() ([]models.Check, error) {
 		if err := rows.Scan(&c.ID, &c.Name, &c.Type, &c.URL, &c.IntervalSeconds, &c.TimeoutSeconds, &c.Enabled, &c.CreatedAt,
 			&statusCodesJSON, &c.Method, &c.JSONPath, &c.ExpectedJSONValue,
 			&c.PostgresConnString, &c.PostgresQuery, &c.ExpectedQueryValue, &c.Host,
-			&c.DNSHostname, &c.DNSRecordType, &c.ExpectedDNSValue, &groupID); err != nil {
+			&c.DNSHostname, &c.DNSRecordType, &c.ExpectedDNSValue, &groupID, &c.TailscaleDeviceID); err != nil {
 			return nil, err
 		}
 		c.ExpectedStatusCodes = d.parseStatusCodes(statusCodesJSON)

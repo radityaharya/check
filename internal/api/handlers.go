@@ -1,15 +1,18 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gorilla/mux"
 	"gocheck/internal/checker"
 	"gocheck/internal/db"
 	"gocheck/internal/models"
 	"gocheck/internal/notifier"
+	tailscale "tailscale.com/client/tailscale/v2"
 )
 
 type Handlers struct {
@@ -102,6 +105,7 @@ func (h *Handlers) CreateCheck(w http.ResponseWriter, r *http.Request) {
 		DNSHostname:         req.DNSHostname,
 		DNSRecordType:       req.DNSRecordType,
 		ExpectedDNSValue:    req.ExpectedDNSValue,
+		TailscaleDeviceID:   req.TailscaleDeviceID,
 	}
 
 	if check.Method == "" {
@@ -207,6 +211,9 @@ func (h *Handlers) UpdateCheck(w http.ResponseWriter, r *http.Request) {
 	if req.ExpectedDNSValue != nil {
 		check.ExpectedDNSValue = *req.ExpectedDNSValue
 	}
+	if req.TailscaleDeviceID != nil {
+		check.TailscaleDeviceID = *req.TailscaleDeviceID
+	}
 
 	if err := h.db.UpdateCheck(check); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -280,9 +287,13 @@ func (h *Handlers) GetStats(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) GetSettings(w http.ResponseWriter, r *http.Request) {
 	webhookURL, _ := h.db.GetSetting("discord_webhook_url")
+	tailscaleAPIKey, _ := h.db.GetSetting("tailscale_api_key")
+	tailscaleTailnet, _ := h.db.GetSetting("tailscale_tailnet")
 
 	settings := models.Settings{
-		DiscordWebhookURL: webhookURL,
+		DiscordWebhookURL:  webhookURL,
+		TailscaleAPIKey:    tailscaleAPIKey,
+		TailscaleTailnet:   tailscaleTailnet,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -297,6 +308,14 @@ func (h *Handlers) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.db.SetSetting("discord_webhook_url", settings.DiscordWebhookURL); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := h.db.SetSetting("tailscale_api_key", settings.TailscaleAPIKey); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := h.db.SetSetting("tailscale_tailnet", settings.TailscaleTailnet); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -323,6 +342,103 @@ func (h *Handlers) TestWebhook(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "Test notification sent successfully"})
+}
+
+func (h *Handlers) GetTailscaleDevices(w http.ResponseWriter, r *http.Request) {
+	apiKey, _ := h.db.GetSetting("tailscale_api_key")
+	tailnet, _ := h.db.GetSetting("tailscale_tailnet")
+
+	if apiKey == "" || tailnet == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Tailscale API key or tailnet not configured"})
+		return
+	}
+
+	client := &tailscale.Client{
+		Tailnet: tailnet,
+		APIKey:  apiKey,
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	devices, err := client.Devices().List(ctx)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	type DeviceInfo struct {
+		ID        string   `json:"id"`
+		Name      string   `json:"name"`
+		Hostname  string   `json:"hostname"`
+		Addresses []string `json:"addresses"`
+		Online    bool     `json:"online"`
+		OS        string   `json:"os"`
+		LastSeen  string   `json:"last_seen"`
+	}
+
+	result := make([]DeviceInfo, 0, len(devices))
+	for _, d := range devices {
+		online := d.ConnectedToControl
+		if !online && !d.LastSeen.Time.IsZero() {
+			online = time.Since(d.LastSeen.Time) < 5*time.Minute
+		}
+		lastSeen := ""
+		if !d.LastSeen.Time.IsZero() {
+			lastSeen = d.LastSeen.Time.Format(time.RFC3339)
+		}
+		result = append(result, DeviceInfo{
+			ID:        d.ID,
+			Name:      d.Name,
+			Hostname:  d.Hostname,
+			Addresses: d.Addresses,
+			Online:    online,
+			OS:        d.OS,
+			LastSeen:  lastSeen,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+func (h *Handlers) TestTailscale(w http.ResponseWriter, r *http.Request) {
+	apiKey, _ := h.db.GetSetting("tailscale_api_key")
+	tailnet, _ := h.db.GetSetting("tailscale_tailnet")
+
+	if apiKey == "" || tailnet == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Tailscale API key or tailnet not configured"})
+		return
+	}
+
+	client := &tailscale.Client{
+		Tailnet: tailnet,
+		APIKey:  apiKey,
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	devices, err := client.Devices().List(ctx)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":       "ok",
+		"message":      "Connected to Tailscale successfully",
+		"device_count": len(devices),
+	})
 }
 
 func (h *Handlers) GetGroups(w http.ResponseWriter, r *http.Request) {

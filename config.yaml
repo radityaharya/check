@@ -2,4 +2,4 @@ server:
   port: "8080"
 
 database:
-  path: "/data/gocheck.db"
+  path: "gocheck.db"

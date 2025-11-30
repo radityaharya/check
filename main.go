@@ -92,6 +92,8 @@ func main() {
 	router.HandleFunc("/api/settings", handlers.GetSettings).Methods("GET")
 	router.HandleFunc("/api/settings", handlers.UpdateSettings).Methods("PUT")
 	router.HandleFunc("/api/settings/test-webhook", handlers.TestWebhook).Methods("POST")
+	router.HandleFunc("/api/settings/test-tailscale", handlers.TestTailscale).Methods("POST")
+	router.HandleFunc("/api/tailscale/devices", handlers.GetTailscaleDevices).Methods("GET")
 	router.HandleFunc("/api/groups", handlers.GetGroups).Methods("GET")
 	router.HandleFunc("/api/groups", handlers.CreateGroup).Methods("POST")
 	router.HandleFunc("/api/groups/{id}", handlers.UpdateGroup).Methods("PUT")
