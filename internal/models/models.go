@@ -103,16 +103,18 @@ type Tag struct {
 }
 
 type Check struct {
-	ID              int64     `json:"id"`
-	Name            string    `json:"name"`
-	Type            CheckType `json:"type"`
-	URL             string    `json:"url"`
-	IntervalSeconds int       `json:"interval_seconds"`
-	TimeoutSeconds  int       `json:"timeout_seconds"`
-	Enabled         bool      `json:"enabled"`
-	CreatedAt       time.Time `json:"created_at"`
-	GroupID         *int64    `json:"group_id,omitempty"`
-	Tags            []Tag     `json:"tags,omitempty"`
+	ID                int64     `json:"id"`
+	Name              string    `json:"name"`
+	Type              CheckType `json:"type"`
+	URL               string    `json:"url"`
+	IntervalSeconds   int       `json:"interval_seconds"`
+	TimeoutSeconds    int       `json:"timeout_seconds"`
+	Retries           int       `json:"retries,omitempty"`
+	RetryDelaySeconds int       `json:"retry_delay_seconds,omitempty"`
+	Enabled           bool      `json:"enabled"`
+	CreatedAt         time.Time `json:"created_at"`
+	GroupID           *int64    `json:"group_id,omitempty"`
+	Tags              []Tag     `json:"tags,omitempty"`
 
 	// HTTP specific
 	ExpectedStatusCodes []int  `json:"expected_status_codes,omitempty"`
@@ -160,10 +162,10 @@ type CheckWithStatus struct {
 
 type GroupWithChecks struct {
 	Group
-	Checks   []CheckWithStatus `json:"checks"`
-	IsUp     bool              `json:"is_up"`
-	UpCount  int               `json:"up_count"`
-	DownCount int              `json:"down_count"`
+	Checks    []CheckWithStatus `json:"checks"`
+	IsUp      bool              `json:"is_up"`
+	UpCount   int               `json:"up_count"`
+	DownCount int               `json:"down_count"`
 }
 
 type Stats struct {
@@ -175,49 +177,53 @@ type Stats struct {
 }
 
 type CreateCheckRequest struct {
-	Name                string         `json:"name"`
-	Type                CheckType      `json:"type"`
-	URL                 string         `json:"url,omitempty"`
-	IntervalSeconds     FlexibleInt    `json:"interval_seconds"`
-	TimeoutSeconds      FlexibleInt    `json:"timeout_seconds"`
-	Enabled             bool           `json:"enabled"`
-	GroupID             FlexibleInt64  `json:"group_id,omitempty"`
-	TagIDs              []int64        `json:"tag_ids,omitempty"`
-	ExpectedStatusCodes []int          `json:"expected_status_codes,omitempty"`
-	Method              string         `json:"method,omitempty"`
-	JSONPath            string         `json:"json_path,omitempty"`
-	ExpectedJSONValue   string         `json:"expected_json_value,omitempty"`
-	PostgresConnString  string         `json:"postgres_conn_string,omitempty"`
-	PostgresQuery       string         `json:"postgres_query,omitempty"`
-	ExpectedQueryValue  string         `json:"expected_query_value,omitempty"`
-	Host                string         `json:"host,omitempty"`
-	DNSHostname         string         `json:"dns_hostname,omitempty"`
-	DNSRecordType       string         `json:"dns_record_type,omitempty"`
-	ExpectedDNSValue    string         `json:"expected_dns_value,omitempty"`
-	TailscaleDeviceID   string         `json:"tailscale_device_id,omitempty"`
+	Name                string        `json:"name"`
+	Type                CheckType     `json:"type"`
+	URL                 string        `json:"url,omitempty"`
+	IntervalSeconds     FlexibleInt   `json:"interval_seconds"`
+	TimeoutSeconds      FlexibleInt   `json:"timeout_seconds"`
+	Retries             FlexibleInt   `json:"retries"`
+	RetryDelaySeconds   FlexibleInt   `json:"retry_delay_seconds"`
+	Enabled             bool          `json:"enabled"`
+	GroupID             FlexibleInt64 `json:"group_id,omitempty"`
+	TagIDs              []int64       `json:"tag_ids,omitempty"`
+	ExpectedStatusCodes []int         `json:"expected_status_codes,omitempty"`
+	Method              string        `json:"method,omitempty"`
+	JSONPath            string        `json:"json_path,omitempty"`
+	ExpectedJSONValue   string        `json:"expected_json_value,omitempty"`
+	PostgresConnString  string        `json:"postgres_conn_string,omitempty"`
+	PostgresQuery       string        `json:"postgres_query,omitempty"`
+	ExpectedQueryValue  string        `json:"expected_query_value,omitempty"`
+	Host                string        `json:"host,omitempty"`
+	DNSHostname         string        `json:"dns_hostname,omitempty"`
+	DNSRecordType       string        `json:"dns_record_type,omitempty"`
+	ExpectedDNSValue    string        `json:"expected_dns_value,omitempty"`
+	TailscaleDeviceID   string        `json:"tailscale_device_id,omitempty"`
 }
 
 type UpdateCheckRequest struct {
-	Name                *string        `json:"name,omitempty"`
-	Type                *CheckType     `json:"type,omitempty"`
-	URL                 *string        `json:"url,omitempty"`
-	IntervalSeconds     FlexibleInt    `json:"interval_seconds,omitempty"`
-	TimeoutSeconds      FlexibleInt    `json:"timeout_seconds,omitempty"`
-	Enabled             *bool          `json:"enabled,omitempty"`
-	GroupID             FlexibleInt64  `json:"group_id,omitempty"`
-	TagIDs              *[]int64       `json:"tag_ids,omitempty"`
-	ExpectedStatusCodes *[]int         `json:"expected_status_codes,omitempty"`
-	Method              *string        `json:"method,omitempty"`
-	JSONPath            *string        `json:"json_path,omitempty"`
-	ExpectedJSONValue   *string        `json:"expected_json_value,omitempty"`
-	PostgresConnString  *string        `json:"postgres_conn_string,omitempty"`
-	PostgresQuery       *string        `json:"postgres_query,omitempty"`
-	ExpectedQueryValue  *string        `json:"expected_query_value,omitempty"`
-	Host                *string        `json:"host,omitempty"`
-	DNSHostname         *string        `json:"dns_hostname,omitempty"`
-	DNSRecordType       *string        `json:"dns_record_type,omitempty"`
-	ExpectedDNSValue    *string        `json:"expected_dns_value,omitempty"`
-	TailscaleDeviceID   *string        `json:"tailscale_device_id,omitempty"`
+	Name                *string       `json:"name,omitempty"`
+	Type                *CheckType    `json:"type,omitempty"`
+	URL                 *string       `json:"url,omitempty"`
+	IntervalSeconds     FlexibleInt   `json:"interval_seconds,omitempty"`
+	TimeoutSeconds      FlexibleInt   `json:"timeout_seconds,omitempty"`
+	Retries             FlexibleInt   `json:"retries,omitempty"`
+	RetryDelaySeconds   FlexibleInt   `json:"retry_delay_seconds,omitempty"`
+	Enabled             *bool         `json:"enabled,omitempty"`
+	GroupID             FlexibleInt64 `json:"group_id,omitempty"`
+	TagIDs              *[]int64      `json:"tag_ids,omitempty"`
+	ExpectedStatusCodes *[]int        `json:"expected_status_codes,omitempty"`
+	Method              *string       `json:"method,omitempty"`
+	JSONPath            *string       `json:"json_path,omitempty"`
+	ExpectedJSONValue   *string       `json:"expected_json_value,omitempty"`
+	PostgresConnString  *string       `json:"postgres_conn_string,omitempty"`
+	PostgresQuery       *string       `json:"postgres_query,omitempty"`
+	ExpectedQueryValue  *string       `json:"expected_query_value,omitempty"`
+	Host                *string       `json:"host,omitempty"`
+	DNSHostname         *string       `json:"dns_hostname,omitempty"`
+	DNSRecordType       *string       `json:"dns_record_type,omitempty"`
+	ExpectedDNSValue    *string       `json:"expected_dns_value,omitempty"`
+	TailscaleDeviceID   *string       `json:"tailscale_device_id,omitempty"`
 }
 
 type CreateGroupRequest struct {
@@ -241,9 +247,9 @@ type UpdateTagRequest struct {
 }
 
 type Settings struct {
-	DiscordWebhookURL  string `json:"discord_webhook_url"`
-	GotifyServerURL    string `json:"gotify_server_url"`
-	GotifyToken        string `json:"gotify_token"`
-	TailscaleAPIKey    string `json:"tailscale_api_key"`
-	TailscaleTailnet   string `json:"tailscale_tailnet"`
+	DiscordWebhookURL string `json:"discord_webhook_url"`
+	GotifyServerURL   string `json:"gotify_server_url"`
+	GotifyToken       string `json:"gotify_token"`
+	TailscaleAPIKey   string `json:"tailscale_api_key"`
+	TailscaleTailnet  string `json:"tailscale_tailnet"`
 }

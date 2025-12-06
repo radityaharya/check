@@ -145,25 +145,49 @@ func (e *Engine) runCheck(state *checkState) {
 
 func (e *Engine) performCheck(state *checkState) {
 	check := state.check
-	start := time.Now()
+
+	retries := check.Retries
+	if retries < 0 {
+		retries = 0
+	}
+	if retries > 10 {
+		retries = 10
+	}
+	delaySeconds := check.RetryDelaySeconds
+	if delaySeconds <= 0 {
+		delaySeconds = 5
+	}
+	if delaySeconds > 60 {
+		delaySeconds = 60
+	}
 
 	var history models.CheckHistory
-	history.CheckID = check.ID
-	history.CheckedAt = time.Now()
+	for attempt := 0; attempt <= retries; attempt++ {
+		h := models.CheckHistory{CheckID: check.ID, CheckedAt: time.Now()}
+		start := time.Now()
 
-	switch check.Type {
-	case models.CheckTypePing:
-		e.performPingCheck(&check, &history, start)
-	case models.CheckTypePostgres:
-		e.performPostgresCheck(&check, &history, start)
-	case models.CheckTypeJSONHTTP:
-		e.performJSONHTTPCheck(&check, &history, start)
-	case models.CheckTypeDNS:
-		e.performDNSCheck(&check, &history, start)
-	case models.CheckTypeTailscale:
-		e.performTailscaleCheck(&check, &history, start)
-	default:
-		e.performHTTPCheck(&check, &history, start)
+		switch check.Type {
+		case models.CheckTypePing:
+			e.performPingCheck(&check, &h, start)
+		case models.CheckTypePostgres:
+			e.performPostgresCheck(&check, &h, start)
+		case models.CheckTypeJSONHTTP:
+			e.performJSONHTTPCheck(&check, &h, start)
+		case models.CheckTypeDNS:
+			e.performDNSCheck(&check, &h, start)
+		case models.CheckTypeTailscale:
+			e.performTailscaleCheck(&check, &h, start)
+		default:
+			e.performHTTPCheck(&check, &h, start)
+		}
+
+		history = h
+		if history.Success {
+			break
+		}
+		if attempt < retries {
+			time.Sleep(time.Duration(delaySeconds) * time.Second)
+		}
 	}
 
 	e.db.AddHistory(&history)

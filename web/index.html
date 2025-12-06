@@ -21,16 +21,16 @@
           },
           colors: {
             terminal: {
-              bg: '#0a0a0f',
-              surface: '#12121a',
-              border: '#1e1e2e',
-              muted: '#45475a',
-              text: '#cdd6f4',
-              green: '#a6e3a1',
+              bg: '#050507',
+              surface: '#0c0c12',
+              border: '#151520',
+              muted: '#606478',
+              text: '#e5e7ef',
+              green: '#c4a7e7',
               red: '#f38ba8',
               yellow: '#f9e2af',
-              blue: '#89b4fa',
-              purple: '#cba6f7',
+              blue: '#7aa2f7',
+              purple: '#b794f6',
               cyan: '#94e2d5',
             }
           }
@@ -49,16 +49,16 @@
     }
 
     ::-webkit-scrollbar-track {
-      background: #12121a;
+      background: #0c0c12;
     }
 
     ::-webkit-scrollbar-thumb {
-      background: #45475a;
+      background: #303443;
       border-radius: 3px;
     }
 
     ::-webkit-scrollbar-thumb:hover {
-      background: #585b70;
+      background: #3c4051;
     }
 
     .glow-green {
@@ -84,6 +84,24 @@
     .pulse-dot {
       animation: pulse-dot 1s ease-in-out infinite;
     }
+
+    .skeleton {
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(90deg, rgba(48, 52, 67, 0.3) 25%, rgba(60, 64, 81, 0.6) 45%, rgba(48, 52, 67, 0.3) 65%);
+      background-size: 400% 100%;
+      animation: shimmer 1.4s ease-in-out infinite;
+    }
+
+    @keyframes shimmer {
+      0% {
+        background-position: 100% 0;
+      }
+
+      100% {
+        background-position: -100% 0;
+      }
+    }
   </style>
 </head>
 
@@ -92,7 +110,7 @@
     <header class="bg-terminal-surface border-b border-terminal-border sticky top-0 z-40">
       <div class="container mx-auto px-6 py-4 flex justify-between items-center">
         <div class="flex items-center gap-3">
-          <div class="w-3 h-3 rounded-full bg-terminal-green" :class="isLive ? 'pulse-dot' : ''"></div>
+          <!-- <div class="w-3 h-3 rounded-full bg-terminal-green" :class="isLive ? 'pulse-dot' : ''"></div> -->
           <span class="text-terminal-muted text-xs">v1.0</span>
         </div>
         <div class="flex items-center gap-4">
@@ -118,7 +136,33 @@
     </header>
 
     <main class="container mx-auto px-6 py-8">
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10" x-show="stats" x-transition>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10" x-show="!hasLoaded" x-cloak>
+        <div class="col-span-full flex flex-wrap items-center gap-2 text-xs mb-2 opacity-70">
+          <div class="h-6 w-32 rounded skeleton"></div>
+          <div class="h-7 w-14 rounded skeleton"></div>
+          <div class="h-7 w-14 rounded skeleton"></div>
+          <div class="h-7 w-14 rounded skeleton"></div>
+          <div class="h-7 w-14 rounded skeleton"></div>
+          <div class="h-7 w-14 rounded skeleton"></div>
+        </div>
+        <template x-for="i in 4" :key="i">
+          <div class="bg-terminal-surface border border-terminal-border rounded-lg p-4">
+            <div class="h-3 w-16 rounded skeleton mb-3"></div>
+            <div class="h-7 w-24 rounded skeleton"></div>
+          </div>
+        </template>
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10" x-show="stats && hasLoaded" x-cloak>
+        <div class="col-span-full flex flex-wrap items-center gap-2 text-xs mb-2">
+          <span class="text-terminal-muted uppercase tracking-widest">Time Range</span>
+          <template x-for="range in ranges" :key="range">
+            <button type="button" @click="setTimeRange(range)"
+              class="px-3 py-1 rounded border text-[10px] uppercase tracking-wide"
+              :class="timeRange === range ? 'border-terminal-green text-terminal-green' : 'border-terminal-border text-terminal-muted hover:text-terminal-text'"
+              x-text="range"></button>
+          </template>
+        </div>
         <div
           class="bg-terminal-surface border border-terminal-border rounded-lg p-4 hover:border-terminal-muted transition">
           <div class="text-[10px] text-terminal-muted uppercase tracking-widest mb-1">total</div>
@@ -127,7 +171,7 @@
         <div
           class="bg-terminal-surface border border-terminal-border rounded-lg p-4 hover:border-terminal-muted transition">
           <div class="text-[10px] text-terminal-muted uppercase tracking-widest mb-1">active</div>
-          <div class="text-2xl font-bold text-terminal-blue" x-text="stats.active_checks"></div>
+          <div class="text-2xl font-bold text-terminal-purple" x-text="stats.active_checks"></div>
         </div>
         <div
           class="bg-terminal-surface border border-terminal-border rounded-lg p-4 hover:border-terminal-muted transition">
@@ -164,7 +208,40 @@
       </div>
 
       <!-- Grouped Monitors -->
-      <div class="space-y-6">
+      <div class="space-y-6" x-show="!hasLoaded" x-cloak>
+        <template x-for="i in 3" :key="i">
+          <div class="bg-terminal-surface border border-terminal-border rounded-lg overflow-hidden">
+            <div class="flex items-center gap-4 p-4 border-b border-terminal-border">
+              <div class="w-1 h-8 rounded skeleton"></div>
+              <div class="w-2.5 h-2.5 rounded-full skeleton"></div>
+              <div class="flex-grow">
+                <div class="flex items-center gap-3">
+                  <div class="h-4 w-32 rounded skeleton"></div>
+                  <div class="h-4 w-20 rounded skeleton"></div>
+                </div>
+              </div>
+              <div class="h-5 w-5 rounded skeleton"></div>
+            </div>
+            <div class="divide-y divide-terminal-border">
+              <template x-for="j in 2" :key="j">
+                <div class="p-4">
+                  <div class="flex items-center gap-4">
+                    <div class="w-2.5 h-2.5 rounded-full skeleton"></div>
+                    <div class="flex-grow">
+                      <div class="h-4 w-40 rounded skeleton mb-2"></div>
+                      <div class="h-3 w-64 rounded skeleton"></div>
+                    </div>
+                    <div class="hidden sm:block h-4 w-12 rounded skeleton"></div>
+                    <div class="hidden sm:block h-4 w-16 rounded skeleton"></div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <div class="space-y-6" x-show="hasLoaded">
         <template x-for="group in groupedChecks" :key="group.id">
           <div class="bg-terminal-surface border border-terminal-border rounded-lg overflow-hidden">
             <!-- Group Header -->
@@ -257,7 +334,8 @@
                           <span class="text-terminal-muted">interval: <span class="text-terminal-text"
                               x-text="check.interval_seconds + 's'"></span></span>
                         </div>
-                        <div class="flex gap-[2px] h-5 w-full rounded overflow-hidden bg-terminal-border/50 mb-4">
+                        <div
+                          class="flex gap-[2px] h-5 w-full rounded bg-terminal-border/50 mb-4 overflow-visible relative">
                           <template x-for="(status, index) in getStatusBar(check.history)" :key="index">
                             <div class="flex-1 h-full transition-all hover:opacity-70 cursor-pointer relative group/bar"
                               :class="status.success ? 'bg-terminal-green' : (status.empty ? 'bg-terminal-border' : 'bg-terminal-red')">
@@ -293,7 +371,7 @@
         </template>
       </div>
 
-      <div x-show="groupedChecks.length === 0"
+      <div x-show="hasLoaded && groupedChecks.length === 0"
         class="text-center py-20 border border-dashed border-terminal-border rounded-lg">
         <div class="text-terminal-muted mb-2 text-4xl">_</div>
         <div class="text-terminal-muted mb-4 text-sm">no monitors configured</div>
@@ -368,7 +446,7 @@
                   class="w-full bg-terminal-surface border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
                   placeholder="My Server">
               </div>
-              <div class="grid grid-cols-2 gap-4">
+              <div class="grid grid-cols-4 gap-4">
                 <div>
                   <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Interval
                     (s)</label>
@@ -379,6 +457,18 @@
                   <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Timeout
                     (s)</label>
                   <input type="number" x-model="formData.timeout_seconds" min="1" required
+                    class="w-full bg-terminal-surface border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono">
+                </div>
+                <div>
+                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Retries</label>
+                  <input type="number" x-model="formData.retries" min="0" max="10"
+                    class="w-full bg-terminal-surface border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono">
+                  <div class="text-[10px] text-terminal-muted mt-1">0-10</div>
+                </div>
+                <div>
+                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Retry Delay
+                    (s)</label>
+                  <input type="number" x-model="formData.retry_delay_seconds" min="1" max="60"
                     class="w-full bg-terminal-surface border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono">
                 </div>
               </div>
@@ -697,7 +787,8 @@
     <div x-show="showSettingsModal" x-cloak
       class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" x-transition.opacity
       @click.self="showSettingsModal = false">
-      <div class="bg-terminal-surface border border-terminal-border rounded-lg shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col"
+      <div
+        class="bg-terminal-surface border border-terminal-border rounded-lg shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col"
         @click.stop>
         <div class="p-8 pb-4 flex-shrink-0">
           <h3 class="text-lg font-bold text-terminal-green flex items-center gap-2"><span
@@ -705,90 +796,91 @@
         </div>
         <div class="px-8 pb-4 overflow-y-auto flex-1">
           <div class="space-y-6">
-          <div class="text-xs text-terminal-muted uppercase tracking-widest mb-2">Discord Notifications</div>
-          <div>
-            <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Webhook URL</label>
-            <input type="url" x-model="settings.discord_webhook_url"
-              class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
-              placeholder="https://discord.com/api/webhooks/...">
-          </div>
-          <button type="button" @click="testWebhook()" :disabled="testingWebhook || !settings.discord_webhook_url"
-            class="w-full bg-terminal-border text-terminal-text px-4 py-3 rounded font-bold hover:bg-terminal-muted transition text-sm uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-            <template x-if="testingWebhook"><svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                </path>
-              </svg></template>
-            <span x-text="testingWebhook ? 'Sending...' : 'Test Webhook'"></span>
-          </button>
-          <div x-show="webhookTestResult" class="text-sm p-3 rounded"
-            :class="webhookTestResult?.success ? 'bg-terminal-green/20 text-terminal-green' : 'bg-terminal-red/20 text-terminal-red'"
-            x-text="webhookTestResult?.message"></div>
-
-          <div class="border-t border-terminal-border pt-6 mt-6">
-            <div class="text-xs text-terminal-muted uppercase tracking-widest mb-2">Gotify Notifications</div>
-            <div class="space-y-4">
-              <div>
-                <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Server URL</label>
-                <input type="url" x-model="settings.gotify_server_url"
-                  class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
-                  placeholder="https://gotify.example.com">
-              </div>
-              <div>
-                <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">App Token</label>
-                <input type="password" x-model="settings.gotify_token"
-                  class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
-                  placeholder="Axxxxxxxxxxxxx">
-              </div>
-              <button type="button" @click="testGotify()" :disabled="testingGotify || !settings.gotify_server_url || !settings.gotify_token"
-                class="w-full bg-terminal-border text-terminal-text px-4 py-3 rounded font-bold hover:bg-terminal-muted transition text-sm uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                <template x-if="testingGotify"><svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                    </path>
-                  </svg></template>
-                <span x-text="testingGotify ? 'Sending...' : 'Test Gotify'"></span>
-              </button>
-              <div x-show="gotifyTestResult" class="text-sm p-3 rounded"
-                :class="gotifyTestResult?.success ? 'bg-terminal-green/20 text-terminal-green' : 'bg-terminal-red/20 text-terminal-red'"
-                x-text="gotifyTestResult?.message"></div>
+            <div class="text-xs text-terminal-muted uppercase tracking-widest mb-2">Discord Notifications</div>
+            <div>
+              <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Webhook URL</label>
+              <input type="url" x-model="settings.discord_webhook_url"
+                class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
+                placeholder="https://discord.com/api/webhooks/...">
             </div>
-          </div>
+            <button type="button" @click="testWebhook()" :disabled="testingWebhook || !settings.discord_webhook_url"
+              class="w-full bg-terminal-border text-terminal-text px-4 py-3 rounded font-bold hover:bg-terminal-muted transition text-sm uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+              <template x-if="testingWebhook"><svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                  </path>
+                </svg></template>
+              <span x-text="testingWebhook ? 'Sending...' : 'Test Webhook'"></span>
+            </button>
+            <div x-show="webhookTestResult" class="text-sm p-3 rounded"
+              :class="webhookTestResult?.success ? 'bg-terminal-green/20 text-terminal-green' : 'bg-terminal-red/20 text-terminal-red'"
+              x-text="webhookTestResult?.message"></div>
 
-          <div class="border-t border-terminal-border pt-6 mt-6">
-            <div class="text-xs text-terminal-cyan uppercase tracking-widest mb-4">Tailscale Integration</div>
-            <div class="space-y-4">
-              <div>
-                <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">API Key</label>
-                <input type="password" x-model="settings.tailscale_api_key"
-                  class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
-                  placeholder="tskey-api-...">
+            <div class="border-t border-terminal-border pt-6 mt-6">
+              <div class="text-xs text-terminal-muted uppercase tracking-widest mb-2">Gotify Notifications</div>
+              <div class="space-y-4">
+                <div>
+                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Server URL</label>
+                  <input type="url" x-model="settings.gotify_server_url"
+                    class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
+                    placeholder="https://gotify.example.com">
+                </div>
+                <div>
+                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">App Token</label>
+                  <input type="password" x-model="settings.gotify_token"
+                    class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
+                    placeholder="Axxxxxxxxxxxxx">
+                </div>
+                <button type="button" @click="testGotify()"
+                  :disabled="testingGotify || !settings.gotify_server_url || !settings.gotify_token"
+                  class="w-full bg-terminal-border text-terminal-text px-4 py-3 rounded font-bold hover:bg-terminal-muted transition text-sm uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                  <template x-if="testingGotify"><svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                      <path class="opacity-75" fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                      </path>
+                    </svg></template>
+                  <span x-text="testingGotify ? 'Sending...' : 'Test Gotify'"></span>
+                </button>
+                <div x-show="gotifyTestResult" class="text-sm p-3 rounded"
+                  :class="gotifyTestResult?.success ? 'bg-terminal-green/20 text-terminal-green' : 'bg-terminal-red/20 text-terminal-red'"
+                  x-text="gotifyTestResult?.message"></div>
               </div>
-              <div>
-                <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Tailnet</label>
-                <input type="text" x-model="settings.tailscale_tailnet"
-                  class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
-                  placeholder="example.com or your-org.github">
-                <div class="text-[10px] text-terminal-muted mt-1">Your Tailscale tailnet name or organization</div>
-              </div>
-              <button type="button" @click="testTailscale()"
-                :disabled="testingTailscale || !settings.tailscale_api_key || !settings.tailscale_tailnet"
-                class="w-full bg-terminal-border text-terminal-text px-4 py-3 rounded font-bold hover:bg-terminal-muted transition text-sm uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                <template x-if="testingTailscale"><svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                    </path>
-                  </svg></template>
-                <span x-text="testingTailscale ? 'Testing...' : 'Test Connection'"></span>
-              </button>
-              <div x-show="tailscaleTestResult" class="text-sm p-3 rounded"
-                :class="tailscaleTestResult?.success ? 'bg-terminal-green/20 text-terminal-green' : 'bg-terminal-red/20 text-terminal-red'"
-                x-text="tailscaleTestResult?.message"></div>
             </div>
-          </div>
+
+            <div class="border-t border-terminal-border pt-6 mt-6">
+              <div class="text-xs text-terminal-cyan uppercase tracking-widest mb-4">Tailscale Integration</div>
+              <div class="space-y-4">
+                <div>
+                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">API Key</label>
+                  <input type="password" x-model="settings.tailscale_api_key"
+                    class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
+                    placeholder="tskey-api-...">
+                </div>
+                <div>
+                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Tailnet</label>
+                  <input type="text" x-model="settings.tailscale_tailnet"
+                    class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
+                    placeholder="example.com or your-org.github">
+                  <div class="text-[10px] text-terminal-muted mt-1">Your Tailscale tailnet name or organization</div>
+                </div>
+                <button type="button" @click="testTailscale()"
+                  :disabled="testingTailscale || !settings.tailscale_api_key || !settings.tailscale_tailnet"
+                  class="w-full bg-terminal-border text-terminal-text px-4 py-3 rounded font-bold hover:bg-terminal-muted transition text-sm uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                  <template x-if="testingTailscale"><svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                      <path class="opacity-75" fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                      </path>
+                    </svg></template>
+                  <span x-text="testingTailscale ? 'Testing...' : 'Test Connection'"></span>
+                </button>
+                <div x-show="tailscaleTestResult" class="text-sm p-3 rounded"
+                  :class="tailscaleTestResult?.success ? 'bg-terminal-green/20 text-terminal-green' : 'bg-terminal-red/20 text-terminal-red'"
+                  x-text="tailscaleTestResult?.message"></div>
+              </div>
+            </div>
           </div>
         </div>
         <div class="p-8 pt-4 flex gap-4 flex-shrink-0 border-t border-terminal-border">
@@ -863,6 +955,8 @@
         groups: [],
         tags: [],
         stats: null,
+        loadingChecks: true,
+        hasLoaded: false,
         showAddModal: false,
         showHistoryModal: false,
         showSettingsModal: false,
@@ -878,6 +972,8 @@
         isLive: true,
         expandedChecks: [],
         expandedGroups: [],
+        timeRange: '1d',
+        ranges: ['15m', '30m', '60m', '1d', '30d'],
         settings: { discord_webhook_url: '', gotify_server_url: '', gotify_token: '', tailscale_api_key: '', tailscale_tailnet: '' },
         testingWebhook: false,
         webhookTestResult: null,
@@ -888,11 +984,12 @@
         tailscaleDevices: [],
         loadingTailscaleDevices: false,
         expectedStatusCodesInput: '200',
-        tagColors: ['#a6e3a1', '#f38ba8', '#f9e2af', '#89b4fa', '#cba6f7', '#94e2d5', '#fab387', '#f5c2e7', '#74c7ec', '#b4befe'],
+        tagColors: ['#c4a7e7', '#f38ba8', '#f9e2af', '#7aa2f7', '#b794f6', '#94e2d5', '#fab387', '#f5c2e7', '#74c7ec', '#b4befe'],
         groupForm: { name: '', sort_order: 0 },
-        tagForm: { name: '', color: '#a6e3a1' },
+        tagForm: { name: '', color: '#c4a7e7' },
         formData: {
           name: '', type: 'http', url: '', interval_seconds: 60, timeout_seconds: 10, enabled: true,
+          retries: 0, retry_delay_seconds: 5,
           method: 'GET', expected_status_codes: [200], json_path: '', expected_json_value: '',
           host: '', postgres_conn_string: '', postgres_query: '', expected_query_value: '',
           dns_hostname: '', dns_record_type: 'A', expected_dns_value: '', group_id: '', tag_ids: [],
@@ -907,14 +1004,20 @@
 
         async loadData() {
           try {
-            const [groupedRes, statsRes] = await Promise.all([fetch('/api/checks/grouped'), fetch('/api/stats')]);
+            const firstLoad = !this.hasLoaded;
+            if (firstLoad) this.loadingChecks = true;
+            const qs = `?range=${encodeURIComponent(this.timeRange)}`;
+            const [groupedRes, statsRes] = await Promise.all([fetch('/api/checks/grouped' + qs), fetch('/api/stats' + qs)]);
             this.groupedChecks = await groupedRes.json() || [];
             this.stats = await statsRes.json();
             this.lastUpdated = new Date();
             this.isLive = true;
+            this.hasLoaded = true;
           } catch (error) {
             console.error('Failed to load data:', error);
             this.isLive = false;
+          } finally {
+            this.loadingChecks = false;
           }
         },
 
@@ -1018,6 +1121,12 @@
           idx === -1 ? this.expandedGroups.push(groupId) : this.expandedGroups.splice(idx, 1);
         },
 
+        setTimeRange(range) {
+          if (this.timeRange === range) return;
+          this.timeRange = range;
+          this.loadData();
+        },
+
         toggleTag(tagId) {
           const idx = this.formData.tag_ids.indexOf(tagId);
           idx === -1 ? this.formData.tag_ids.push(tagId) : this.formData.tag_ids.splice(idx, 1);
@@ -1055,20 +1164,20 @@
           const canvas = container.querySelector('canvas');
           const ctx = canvas.getContext('2d');
           const chartData = [...history].reverse();
-          const labels = chartData.map(h => new Date(h.checked_at).toLocaleTimeString());
+          const labels = chartData.map(h => new Date(h.checked_at).toLocaleString());
           const dataPoints = chartData.map(h => h.response_time_ms);
           if (canvas.chartInstance) {
             canvas.chartInstance.data.labels = labels;
             canvas.chartInstance.data.datasets[0].data = dataPoints;
-            canvas.chartInstance.data.datasets[0].borderColor = isUp ? '#a6e3a1' : '#f38ba8';
-            canvas.chartInstance.data.datasets[0].backgroundColor = isUp ? 'rgba(166,227,161,0.1)' : 'rgba(243,139,168,0.1)';
+            canvas.chartInstance.data.datasets[0].borderColor = isUp ? '#c4a7e7' : '#f38ba8';
+            canvas.chartInstance.data.datasets[0].backgroundColor = isUp ? 'rgba(196,167,231,0.1)' : 'rgba(243,139,168,0.1)';
             canvas.chartInstance.update('none');
             return;
           }
           canvas.chartInstance = new Chart(ctx, {
             type: 'line',
-            data: { labels, datasets: [{ data: dataPoints, borderColor: isUp ? '#a6e3a1' : '#f38ba8', borderWidth: 1.5, backgroundColor: isUp ? 'rgba(166,227,161,0.1)' : 'rgba(243,139,168,0.1)', fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 3 }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false, backgroundColor: '#12121a', titleColor: '#45475a', bodyColor: '#cdd6f4', borderColor: '#1e1e2e', borderWidth: 1 } }, scales: { x: { display: false }, y: { display: false, beginAtZero: true } }, animation: { duration: 0 } }
+            data: { labels, datasets: [{ data: dataPoints, borderColor: isUp ? '#c4a7e7' : '#f38ba8', borderWidth: 1.5, backgroundColor: isUp ? 'rgba(196,167,231,0.1)' : 'rgba(243,139,168,0.1)', fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 3 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false, backgroundColor: '#12121a', titleColor: '#cdd6f4', bodyColor: '#cdd6f4', borderColor: '#1e1e2e', borderWidth: 1, callbacks: { title: items => items.map(i => labels[i.dataIndex]), label: ctx => `${ctx.parsed.y} ms` } } }, scales: { x: { display: false }, y: { display: false, beginAtZero: true } }, animation: { duration: 0 } }
           });
         },
 
@@ -1077,7 +1186,7 @@
           const result = [];
           const data = history || [];
           for (let i = 0; i < limit; i++) {
-            if (i < data.length) { result.unshift({ success: data[i].success, time: new Date(data[i].checked_at).toLocaleTimeString(), empty: false }); }
+            if (i < data.length) { result.unshift({ success: data[i].success, time: new Date(data[i].checked_at).toLocaleString(), empty: false }); }
             else { result.unshift({ empty: true }); }
           }
           return result;
@@ -1094,7 +1203,7 @@
         openAddModal() {
           this.editingCheck = null;
           this.expectedStatusCodesInput = '200';
-          this.formData = { name: '', type: 'http', url: '', interval_seconds: 60, timeout_seconds: 10, enabled: true, method: 'GET', expected_status_codes: [200], json_path: '', expected_json_value: '', host: '', postgres_conn_string: '', postgres_query: '', expected_query_value: '', dns_hostname: '', dns_record_type: 'A', expected_dns_value: '', group_id: '', tag_ids: [], tailscale_device_id: '' };
+          this.formData = { name: '', type: 'http', url: '', interval_seconds: 60, timeout_seconds: 10, retries: 0, retry_delay_seconds: 5, enabled: true, method: 'GET', expected_status_codes: [200], json_path: '', expected_json_value: '', host: '', postgres_conn_string: '', postgres_query: '', expected_query_value: '', dns_hostname: '', dns_record_type: 'A', expected_dns_value: '', group_id: '', tag_ids: [], tailscale_device_id: '' };
           this.showAddModal = true;
         },
 
@@ -1103,7 +1212,7 @@
           const codes = check.expected_status_codes || [200];
           this.expectedStatusCodesInput = codes.join(', ');
           this.formData = {
-            name: check.name, type: check.type || 'http', url: check.url || '', interval_seconds: check.interval_seconds, timeout_seconds: check.timeout_seconds, enabled: check.enabled,
+            name: check.name, type: check.type || 'http', url: check.url || '', interval_seconds: check.interval_seconds, timeout_seconds: check.timeout_seconds, retries: check.retries ?? 0, retry_delay_seconds: check.retry_delay_seconds ?? 5, enabled: check.enabled,
             method: check.method || 'GET', expected_status_codes: codes, json_path: check.json_path || '', expected_json_value: check.expected_json_value || '',
             host: check.host || '', postgres_conn_string: check.postgres_conn_string || '', postgres_query: check.postgres_query || '', expected_query_value: check.expected_query_value || '',
             dns_hostname: check.dns_hostname || '', dns_record_type: check.dns_record_type || 'A', expected_dns_value: check.expected_dns_value || '',
@@ -1187,7 +1296,7 @@
             const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(this.tagForm) });
             if (!response.ok) throw new Error('Failed to save tag');
             this.editingTag = null;
-            this.tagForm = { name: '', color: '#a6e3a1' };
+            this.tagForm = { name: '', color: '#c4a7e7' };
             await Promise.all([this.loadData(), this.loadTags()]);
             if (!this.editingTag) this.showTagModal = false;
           } catch (error) { alert('Failed to save tag: ' + error.message); }
@@ -1205,7 +1314,7 @@
         async openHistoryModal(check) {
           this.selectedCheck = check;
           try {
-            const response = await fetch(`/api/checks/${check.id}/history?limit=500`);
+            const response = await fetch(`/api/checks/${check.id}/history?limit=500&range=${encodeURIComponent(this.timeRange)}`);
             this.history = await response.json() || [];
             this.filteredHistory = [];
             for (let i = 0; i < this.history.length; i++) {

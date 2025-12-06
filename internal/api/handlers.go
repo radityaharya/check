@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -16,21 +17,56 @@ import (
 )
 
 type Handlers struct {
-	db       *db.Database
-	engine   *checker.Engine
+	db        *db.Database
+	engine    *checker.Engine
 	notifiers []notifier.Notifier
 }
 
 func NewHandlers(database *db.Database, engine *checker.Engine, notifiers []notifier.Notifier) *Handlers {
 	return &Handlers{
-		db:       database,
-		engine:   engine,
+		db:        database,
+		engine:    engine,
 		notifiers: notifiers,
 	}
 }
 
+func parseRangeParam(r *http.Request) (*time.Time, error) {
+	rangeStr := r.URL.Query().Get("range")
+	if rangeStr == "" {
+		return nil, nil
+	}
+
+	var dur time.Duration
+	switch rangeStr {
+	case "15m":
+		dur = 15 * time.Minute
+	case "30m":
+		dur = 30 * time.Minute
+	case "60m":
+		dur = 60 * time.Minute
+	case "1d":
+		dur = 24 * time.Hour
+	case "30d":
+		dur = 30 * 24 * time.Hour
+	default:
+		return nil, fmt.Errorf("invalid range")
+	}
+
+	t := time.Now().Add(-dur)
+	return &t, nil
+}
 
 func (h *Handlers) GetChecks(w http.ResponseWriter, r *http.Request) {
+	since, err := parseRangeParam(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	historyLimit := 50
+	if since != nil {
+		historyLimit = 500
+	}
+
 	checks, err := h.db.GetAllChecks()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -40,7 +76,7 @@ func (h *Handlers) GetChecks(w http.ResponseWriter, r *http.Request) {
 	var checksWithStatus []models.CheckWithStatus
 	for _, check := range checks {
 		lastStatus, _ := h.db.GetLastStatus(check.ID)
-		history, _ := h.db.GetCheckHistory(check.ID, 50)
+		history, _ := h.db.GetCheckHistory(check.ID, since, historyLimit)
 
 		cws := models.CheckWithStatus{
 			Check:      check,
@@ -84,6 +120,20 @@ func (h *Handlers) CreateCheck(w http.ResponseWriter, r *http.Request) {
 	if timeoutSeconds <= 0 {
 		timeoutSeconds = 10
 	}
+	retries := req.Retries.Value
+	if retries < 0 {
+		retries = 0
+	}
+	if retries > 10 {
+		retries = 10
+	}
+	retryDelaySeconds := req.RetryDelaySeconds.Value
+	if retryDelaySeconds <= 0 {
+		retryDelaySeconds = 5
+	}
+	if retryDelaySeconds > 60 {
+		retryDelaySeconds = 60
+	}
 
 	check := models.Check{
 		Name:                req.Name,
@@ -91,6 +141,8 @@ func (h *Handlers) CreateCheck(w http.ResponseWriter, r *http.Request) {
 		URL:                 req.URL,
 		IntervalSeconds:     intervalSeconds,
 		TimeoutSeconds:      timeoutSeconds,
+		Retries:             retries,
+		RetryDelaySeconds:   retryDelaySeconds,
 		Enabled:             req.Enabled,
 		GroupID:             req.GroupID.Value,
 		ExpectedStatusCodes: req.ExpectedStatusCodes,
@@ -172,6 +224,26 @@ func (h *Handlers) UpdateCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.TimeoutSeconds.Set {
 		check.TimeoutSeconds = req.TimeoutSeconds.Value
+	}
+	if req.Retries.Set {
+		value := req.Retries.Value
+		if value < 0 {
+			value = 0
+		}
+		if value > 10 {
+			value = 10
+		}
+		check.Retries = value
+	}
+	if req.RetryDelaySeconds.Set {
+		value := req.RetryDelaySeconds.Value
+		if value <= 0 {
+			value = 5
+		}
+		if value > 60 {
+			value = 60
+		}
+		check.RetryDelaySeconds = value
 	}
 	if req.Enabled != nil {
 		check.Enabled = *req.Enabled
@@ -255,6 +327,11 @@ func (h *Handlers) GetCheckHistory(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid id", http.StatusBadRequest)
 		return
 	}
+	since, err := parseRangeParam(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	limit := 100
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
@@ -263,7 +340,7 @@ func (h *Handlers) GetCheckHistory(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	history, err := h.db.GetCheckHistory(id, limit)
+	history, err := h.db.GetCheckHistory(id, since, limit)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -274,7 +351,13 @@ func (h *Handlers) GetCheckHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) GetStats(w http.ResponseWriter, r *http.Request) {
-	stats, err := h.db.GetStats()
+	since, err := parseRangeParam(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	stats, err := h.db.GetStats(since)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -292,11 +375,11 @@ func (h *Handlers) GetSettings(w http.ResponseWriter, r *http.Request) {
 	tailscaleTailnet, _ := h.db.GetSetting("tailscale_tailnet")
 
 	settings := models.Settings{
-		DiscordWebhookURL:  webhookURL,
-		GotifyServerURL:    gotifyServerURL,
-		GotifyToken:        gotifyToken,
-		TailscaleAPIKey:    tailscaleAPIKey,
-		TailscaleTailnet:   tailscaleTailnet,
+		DiscordWebhookURL: webhookURL,
+		GotifyServerURL:   gotifyServerURL,
+		GotifyToken:       gotifyToken,
+		TailscaleAPIKey:   tailscaleAPIKey,
+		TailscaleTailnet:  tailscaleTailnet,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -678,6 +761,16 @@ func (h *Handlers) DeleteTag(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) GetGroupedChecks(w http.ResponseWriter, r *http.Request) {
+	since, err := parseRangeParam(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	historyLimit := 50
+	if since != nil {
+		historyLimit = 500
+	}
+
 	checks, err := h.db.GetAllChecks()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -707,7 +800,7 @@ func (h *Handlers) GetGroupedChecks(w http.ResponseWriter, r *http.Request) {
 
 	for _, check := range checks {
 		lastStatus, _ := h.db.GetLastStatus(check.ID)
-		history, _ := h.db.GetCheckHistory(check.ID, 50)
+		history, _ := h.db.GetCheckHistory(check.ID, since, historyLimit)
 
 		cws := models.CheckWithStatus{
 			Check:      check,

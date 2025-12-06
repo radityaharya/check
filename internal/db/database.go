@@ -41,6 +41,8 @@ func (d *Database) initSchema() error {
 		url TEXT,
 		interval_seconds INTEGER NOT NULL DEFAULT 60,
 		timeout_seconds INTEGER NOT NULL DEFAULT 10,
+		retries INTEGER NOT NULL DEFAULT 0,
+		retry_delay_seconds INTEGER NOT NULL DEFAULT 5,
 		enabled BOOLEAN NOT NULL DEFAULT 1,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		expected_status_codes TEXT,
@@ -103,6 +105,9 @@ func (d *Database) initSchema() error {
 	indexes := `
 	CREATE INDEX IF NOT EXISTS idx_check_history_check_id ON check_history(check_id);
 	CREATE INDEX IF NOT EXISTS idx_check_history_checked_at ON check_history(checked_at);
+	CREATE INDEX IF NOT EXISTS idx_check_history_check_id_checked_at ON check_history(check_id, checked_at DESC);
+	CREATE INDEX IF NOT EXISTS idx_checks_enabled ON checks(enabled);
+	CREATE INDEX IF NOT EXISTS idx_checks_created_at ON checks(created_at);
 	`
 
 	if _, err := d.db.Exec(checksTable); err != nil {
@@ -154,6 +159,8 @@ func (d *Database) migrateSchema() {
 		{"expected_dns_value", "NULL"},
 		{"group_id", "NULL"},
 		{"tailscale_device_id", "NULL"},
+		{"retries", "0"},
+		{"retry_delay_seconds", "5"},
 	}
 
 	for _, col := range columns {
@@ -191,7 +198,7 @@ func (d *Database) encodeStatusCodes(codes []int) string {
 
 func (d *Database) GetAllChecks() ([]models.Check, error) {
 	rows, err := d.db.Query(`
-		SELECT id, name, COALESCE(type, 'http'), COALESCE(url, ''), interval_seconds, timeout_seconds, enabled, created_at,
+		SELECT id, name, COALESCE(type, 'http'), COALESCE(url, ''), interval_seconds, timeout_seconds, COALESCE(retries, 0), COALESCE(retry_delay_seconds, 5), enabled, created_at,
 			COALESCE(expected_status_codes, '[200]'), COALESCE(method, 'GET'), COALESCE(json_path, ''), COALESCE(expected_json_value, ''),
 			COALESCE(postgres_conn_string, ''), COALESCE(postgres_query, ''), COALESCE(expected_query_value, ''), COALESCE(host, ''),
 			COALESCE(dns_hostname, ''), COALESCE(dns_record_type, ''), COALESCE(expected_dns_value, ''), group_id, COALESCE(tailscale_device_id, '')
@@ -208,7 +215,7 @@ func (d *Database) GetAllChecks() ([]models.Check, error) {
 		var c models.Check
 		var statusCodesJSON string
 		var groupID sql.NullInt64
-		if err := rows.Scan(&c.ID, &c.Name, &c.Type, &c.URL, &c.IntervalSeconds, &c.TimeoutSeconds, &c.Enabled, &c.CreatedAt,
+		if err := rows.Scan(&c.ID, &c.Name, &c.Type, &c.URL, &c.IntervalSeconds, &c.TimeoutSeconds, &c.Retries, &c.RetryDelaySeconds, &c.Enabled, &c.CreatedAt,
 			&statusCodesJSON, &c.Method, &c.JSONPath, &c.ExpectedJSONValue,
 			&c.PostgresConnString, &c.PostgresQuery, &c.ExpectedQueryValue, &c.Host,
 			&c.DNSHostname, &c.DNSRecordType, &c.ExpectedDNSValue, &groupID, &c.TailscaleDeviceID); err != nil {
@@ -230,13 +237,13 @@ func (d *Database) GetCheck(id int64) (*models.Check, error) {
 	var statusCodesJSON string
 	var groupID sql.NullInt64
 	err := d.db.QueryRow(`
-		SELECT id, name, COALESCE(type, 'http'), COALESCE(url, ''), interval_seconds, timeout_seconds, enabled, created_at,
+		SELECT id, name, COALESCE(type, 'http'), COALESCE(url, ''), interval_seconds, timeout_seconds, COALESCE(retries, 0), COALESCE(retry_delay_seconds, 5), enabled, created_at,
 			COALESCE(expected_status_codes, '[200]'), COALESCE(method, 'GET'), COALESCE(json_path, ''), COALESCE(expected_json_value, ''),
 			COALESCE(postgres_conn_string, ''), COALESCE(postgres_query, ''), COALESCE(expected_query_value, ''), COALESCE(host, ''),
 			COALESCE(dns_hostname, ''), COALESCE(dns_record_type, ''), COALESCE(expected_dns_value, ''), group_id, COALESCE(tailscale_device_id, '')
 		FROM checks
 		WHERE id = ?
-	`, id).Scan(&c.ID, &c.Name, &c.Type, &c.URL, &c.IntervalSeconds, &c.TimeoutSeconds, &c.Enabled, &c.CreatedAt,
+	`, id).Scan(&c.ID, &c.Name, &c.Type, &c.URL, &c.IntervalSeconds, &c.TimeoutSeconds, &c.Retries, &c.RetryDelaySeconds, &c.Enabled, &c.CreatedAt,
 		&statusCodesJSON, &c.Method, &c.JSONPath, &c.ExpectedJSONValue,
 		&c.PostgresConnString, &c.PostgresQuery, &c.ExpectedQueryValue, &c.Host,
 		&c.DNSHostname, &c.DNSRecordType, &c.ExpectedDNSValue, &groupID, &c.TailscaleDeviceID)
@@ -259,12 +266,12 @@ func (d *Database) GetCheck(id int64) (*models.Check, error) {
 func (d *Database) CreateCheck(c *models.Check) error {
 	statusCodesJSON := d.encodeStatusCodes(c.ExpectedStatusCodes)
 	result, err := d.db.Exec(`
-		INSERT INTO checks (name, type, url, interval_seconds, timeout_seconds, enabled,
+		INSERT INTO checks (name, type, url, interval_seconds, timeout_seconds, retries, retry_delay_seconds, enabled,
 			expected_status_codes, method, json_path, expected_json_value,
 			postgres_conn_string, postgres_query, expected_query_value, host,
 			dns_hostname, dns_record_type, expected_dns_value, group_id, tailscale_device_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, c.Name, c.Type, c.URL, c.IntervalSeconds, c.TimeoutSeconds, c.Enabled,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, c.Name, c.Type, c.URL, c.IntervalSeconds, c.TimeoutSeconds, c.Retries, c.RetryDelaySeconds, c.Enabled,
 		statusCodesJSON, c.Method, c.JSONPath, c.ExpectedJSONValue,
 		c.PostgresConnString, c.PostgresQuery, c.ExpectedQueryValue, c.Host,
 		c.DNSHostname, c.DNSRecordType, c.ExpectedDNSValue, c.GroupID, c.TailscaleDeviceID)
@@ -286,12 +293,12 @@ func (d *Database) UpdateCheck(c *models.Check) error {
 	statusCodesJSON := d.encodeStatusCodes(c.ExpectedStatusCodes)
 	_, err := d.db.Exec(`
 		UPDATE checks
-		SET name = ?, type = ?, url = ?, interval_seconds = ?, timeout_seconds = ?, enabled = ?,
+		SET name = ?, type = ?, url = ?, interval_seconds = ?, timeout_seconds = ?, retries = ?, retry_delay_seconds = ?, enabled = ?,
 			expected_status_codes = ?, method = ?, json_path = ?, expected_json_value = ?,
 			postgres_conn_string = ?, postgres_query = ?, expected_query_value = ?, host = ?,
 			dns_hostname = ?, dns_record_type = ?, expected_dns_value = ?, group_id = ?, tailscale_device_id = ?
 		WHERE id = ?
-	`, c.Name, c.Type, c.URL, c.IntervalSeconds, c.TimeoutSeconds, c.Enabled,
+	`, c.Name, c.Type, c.URL, c.IntervalSeconds, c.TimeoutSeconds, c.Retries, c.RetryDelaySeconds, c.Enabled,
 		statusCodesJSON, c.Method, c.JSONPath, c.ExpectedJSONValue,
 		c.PostgresConnString, c.PostgresQuery, c.ExpectedQueryValue, c.Host,
 		c.DNSHostname, c.DNSRecordType, c.ExpectedDNSValue, c.GroupID, c.TailscaleDeviceID, c.ID)
@@ -305,7 +312,7 @@ func (d *Database) DeleteCheck(id int64) error {
 
 func (d *Database) GetEnabledChecks() ([]models.Check, error) {
 	rows, err := d.db.Query(`
-		SELECT id, name, COALESCE(type, 'http'), COALESCE(url, ''), interval_seconds, timeout_seconds, enabled, created_at,
+		SELECT id, name, COALESCE(type, 'http'), COALESCE(url, ''), interval_seconds, timeout_seconds, COALESCE(retries, 0), COALESCE(retry_delay_seconds, 5), enabled, created_at,
 			COALESCE(expected_status_codes, '[200]'), COALESCE(method, 'GET'), COALESCE(json_path, ''), COALESCE(expected_json_value, ''),
 			COALESCE(postgres_conn_string, ''), COALESCE(postgres_query, ''), COALESCE(expected_query_value, ''), COALESCE(host, ''),
 			COALESCE(dns_hostname, ''), COALESCE(dns_record_type, ''), COALESCE(expected_dns_value, ''), group_id, COALESCE(tailscale_device_id, '')
@@ -322,7 +329,7 @@ func (d *Database) GetEnabledChecks() ([]models.Check, error) {
 		var c models.Check
 		var statusCodesJSON string
 		var groupID sql.NullInt64
-		if err := rows.Scan(&c.ID, &c.Name, &c.Type, &c.URL, &c.IntervalSeconds, &c.TimeoutSeconds, &c.Enabled, &c.CreatedAt,
+		if err := rows.Scan(&c.ID, &c.Name, &c.Type, &c.URL, &c.IntervalSeconds, &c.TimeoutSeconds, &c.Retries, &c.RetryDelaySeconds, &c.Enabled, &c.CreatedAt,
 			&statusCodesJSON, &c.Method, &c.JSONPath, &c.ExpectedJSONValue,
 			&c.PostgresConnString, &c.PostgresQuery, &c.ExpectedQueryValue, &c.Host,
 			&c.DNSHostname, &c.DNSRecordType, &c.ExpectedDNSValue, &groupID, &c.TailscaleDeviceID); err != nil {
@@ -346,14 +353,25 @@ func (d *Database) AddHistory(h *models.CheckHistory) error {
 	return err
 }
 
-func (d *Database) GetCheckHistory(checkID int64, limit int) ([]models.CheckHistory, error) {
-	rows, err := d.db.Query(`
+func (d *Database) GetCheckHistory(checkID int64, since *time.Time, limit int) ([]models.CheckHistory, error) {
+	query := `
 		SELECT id, check_id, status_code, response_time_ms, success, COALESCE(error_message, ''), checked_at
 		FROM check_history
-		WHERE check_id = ?
-		ORDER BY checked_at DESC
-		LIMIT ?
-	`, checkID, limit)
+		WHERE check_id = ?`
+	args := []interface{}{checkID}
+
+	if since != nil {
+		query += " AND checked_at >= ?"
+		args = append(args, since.UTC().Format("2006-01-02 15:04:05"))
+	}
+
+	query += " ORDER BY checked_at DESC"
+	if limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, limit)
+	}
+
+	rows, err := d.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -391,7 +409,7 @@ func (d *Database) GetLastStatus(checkID int64) (*models.CheckHistory, error) {
 	return &h, nil
 }
 
-func (d *Database) GetStats() (*models.Stats, error) {
+func (d *Database) GetStats(since *time.Time) (*models.Stats, error) {
 	var stats models.Stats
 
 	err := d.db.QueryRow("SELECT COUNT(*) FROM checks").Scan(&stats.TotalChecks)
@@ -432,12 +450,17 @@ func (d *Database) GetStats() (*models.Stats, error) {
 	stats.DownChecks = downCount
 
 	var totalChecks, successfulChecks int64
-	err = d.db.QueryRow(`
+	uptimeQuery := `
 		SELECT COUNT(*), COALESCE(SUM(CASE WHEN h.success = 1 THEN 1 ELSE 0 END), 0)
 		FROM check_history h
 		JOIN checks c ON h.check_id = c.id
-		WHERE c.enabled = 1
-	`).Scan(&totalChecks, &successfulChecks)
+		WHERE c.enabled = 1`
+	uptimeArgs := []interface{}{}
+	if since != nil {
+		uptimeQuery += " AND h.checked_at >= ?"
+		uptimeArgs = append(uptimeArgs, since.UTC().Format("2006-01-02 15:04:05"))
+	}
+	err = d.db.QueryRow(uptimeQuery, uptimeArgs...).Scan(&totalChecks, &successfulChecks)
 	if err == nil && totalChecks > 0 {
 		stats.TotalUptime = float64(successfulChecks) / float64(totalChecks) * 100
 	}
