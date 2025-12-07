@@ -2119,10 +2119,18 @@
 
         async toggleCheckEnabled(check) {
           try {
+            // Send full check data to avoid resetting other fields
+            const updateData = {
+              ...check,
+              enabled: !check.enabled,
+              // Ensure tag_ids is properly formatted
+              tag_ids: (check.tags || []).map(t => t.id)
+            };
+
             const response = await fetch(`/api/checks/${check.id}`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ enabled: !check.enabled })
+              body: JSON.stringify(updateData)
             });
             if (!response.ok) throw new Error('Failed to update check');
             await this.loadData();
