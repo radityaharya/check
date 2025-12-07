@@ -1,1 +1,14 @@
+# SQLite database files
 *.db
+*.db-wal
+*.db-shm
+
+# Config files
+config.yaml
+
+# Environment files
+.env
+
+# Build artifacts
+gocheck
+/cmd/import/import

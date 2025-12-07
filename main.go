@@ -21,6 +21,7 @@ type Config struct {
 	} `yaml:"server"`
 	Database struct {
 		Path string `yaml:"path"`
+		URL  string `yaml:"url"`
 	} `yaml:"database"`
 }
 
@@ -47,6 +48,11 @@ func loadConfig() (*Config, error) {
 		config.Database.Path = "gocheck.db"
 	}
 
+	// Override with environment variables if set
+	if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
+		config.Database.URL = dbURL
+	}
+
 	return &config, nil
 }
 
@@ -58,9 +64,20 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	database, err := db.NewDatabase(config.Database.Path)
-	if err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
+	// Initialize database (PostgreSQL or SQLite based on config)
+	var database *db.Database
+	if config.Database.URL != "" {
+		database, err = db.NewDatabaseWithURL(config.Database.URL, config.Database.Path)
+		if err != nil {
+			log.Fatalf("Failed to initialize database: %v", err)
+		}
+		log.Printf("Using PostgreSQL database")
+	} else {
+		database, err = db.NewDatabase(config.Database.Path)
+		if err != nil {
+			log.Fatalf("Failed to initialize database: %v", err)
+		}
+		log.Printf("Using SQLite database at %s", config.Database.Path)
 	}
 	defer database.Close()
 

@@ -1,15 +1,27 @@
 # GoCheck - HTTP Uptime Monitor
 
-A lightweight HTTP uptime monitoring service built with Go, featuring a web dashboard with Alpine.js and Tailwind CSS, SQLite persistence, and Discord notifications.
+A lightweight HTTP uptime monitoring service built with Go, featuring a web dashboard with Alpine.js and Tailwind CSS, dual database support (SQLite/PostgreSQL), and Discord notifications.
 
 ## Features
 
 - HTTP endpoint monitoring with configurable intervals
+- Multiple check types: HTTP, Ping, DNS, PostgreSQL, Tailscale
 - Real-time status dashboard
 - Check history and statistics
-- Discord webhook notifications on status changes
-- SQLite database for persistence
+- Discord and Gotify notifications on status changes
+- **Dual database support**: SQLite (default) or PostgreSQL for production
 - Modern web UI with Alpine.js and Tailwind CSS
+- Check grouping and tagging
+- Retry logic with configurable delays
+
+## Database Support
+
+gocheck supports both SQLite and PostgreSQL:
+
+- **SQLite** (default): Zero-configuration, file-based database
+- **PostgreSQL**: Production-ready with optimized indexing and performance
+
+See [DATABASE.md](DATABASE.md) for detailed configuration options.
 
 ## Installation
 
@@ -21,14 +33,13 @@ cd gocheck
 
 2. Install dependencies:
 ```bash
-go get github.com/gorilla/mux
-go get github.com/mattn/go-sqlite3
-go get gopkg.in/yaml.v3
+go mod download
 ```
 
 3. Configure the application:
-   - Edit `config.yaml` or set environment variables
-   - Set `DISCORD_WEBHOOK_URL` environment variable for Discord notifications
+   - Edit `config.yaml` for basic settings
+   - Set `DATABASE_URL` environment variable for PostgreSQL
+   - Set notification webhook URLs as needed
 
 4. Run the application:
 ```bash
@@ -36,6 +47,18 @@ go run main.go
 ```
 
 The web interface will be available at `http://localhost:8080`
+
+## Quick Start with Docker
+
+### SQLite (Default)
+```bash
+docker-compose up -d
+```
+
+### PostgreSQL
+```bash
+docker-compose -f docker-compose.postgres.yml up -d
+```
 
 ## Configuration
 
@@ -46,16 +69,17 @@ server:
   port: "8080"
 
 database:
-  path: "gocheck.db"
-
-discord:
-  webhook_url: ""
+  path: "gocheck.db"  # SQLite database file
+  # url: "postgres://user:password@localhost:5432/gocheck?sslmode=disable"  # Optional: PostgreSQL URL
 ```
 
 ### Environment Variables
 
 - `CONFIG_PATH` - Override config file path (default: `config.yaml`)
+- `DATABASE_URL` - PostgreSQL connection string (e.g., `postgres://user:password@localhost:5432/gocheck`)
 - `DISCORD_WEBHOOK_URL` - Discord webhook URL (overrides config file)
+
+For PostgreSQL configuration details, see [DATABASE.md](DATABASE.md).
 
 ## Usage
 

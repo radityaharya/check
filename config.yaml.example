@@ -1,0 +1,8 @@
+server:
+  port: "8080"
+
+database:
+  # SQLite path (used if DATABASE_URL is not set)
+  path: "gocheck.db"
+  # PostgreSQL connection string (optional, can also use DATABASE_URL env var)
+  # url: "postgres://user:password@localhost:5432/gocheck?sslmode=disable"
