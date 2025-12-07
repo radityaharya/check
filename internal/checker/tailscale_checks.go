@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"gocheck/internal/models"
+
 	tailscale "tailscale.com/client/tailscale/v2"
 	"tailscale.com/tsnet"
 )
@@ -25,6 +26,7 @@ func getTsnetServer() (*tsnet.Server, error) {
 	tsnetOnce.Do(func() {
 		tsnetServer = &tsnet.Server{
 			Hostname:  "gocheck-monitor",
+			Dir:       "./data/tailscale",
 			Ephemeral: true,
 			Logf:      func(format string, args ...any) {}, // Silent logging
 		}

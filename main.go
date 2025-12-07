@@ -27,21 +27,21 @@ type Config struct {
 }
 
 func loadConfig() (*Config, error) {
+	var config Config
+	
 	configPath := "config.yaml"
 	if envPath := os.Getenv("CONFIG_PATH"); envPath != "" {
 		configPath = envPath
 	}
 
 	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config: %w", err)
+	if err == nil {
+		if err := yaml.Unmarshal(data, &config); err != nil {
+			return nil, fmt.Errorf("failed to parse config: %w", err)
+		}
 	}
 
-	var config Config
-	if err := yaml.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse config: %w", err)
-	}
-
+	// Set defaults
 	if config.Server.Port == "" {
 		config.Server.Port = "8080"
 	}
@@ -50,8 +50,14 @@ func loadConfig() (*Config, error) {
 	}
 
 	// Override with environment variables if set
+	if port := os.Getenv("PORT"); port != "" {
+		config.Server.Port = port
+	}
 	if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
 		config.Database.URL = dbURL
+	}
+	if dbPath := os.Getenv("DATABASE_PATH"); dbPath != "" {
+		config.Database.Path = dbPath
 	}
 
 	return &config, nil
@@ -63,6 +69,11 @@ func main() {
 	config, err := loadConfig()
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Ensure data directory exists
+	if err := os.MkdirAll("./data", 0755); err != nil {
+		log.Fatalf("Failed to create data directory: %v", err)
 	}
 
 	// Initialize database (PostgreSQL or SQLite based on config)

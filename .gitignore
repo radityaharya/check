@@ -15,3 +15,6 @@ gocheck
 
 # Import data files with secrets
 import.json
+
+# Data directory
+/data/
