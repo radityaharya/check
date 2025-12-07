@@ -12,3 +12,6 @@ config.yaml
 # Build artifacts
 gocheck
 /cmd/import/import
+
+# Import data files with secrets
+import.json
