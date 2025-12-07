@@ -322,7 +322,7 @@
 
         <!-- Grouped Monitors -->
         <div class="space-y-6" x-show="!hasLoaded" x-cloak>
-          <template x-for="i in 3" :key="i">
+          <template x-for="i in skeletonGroupCount" :key="i">
             <div class="bg-terminal-surface border border-terminal-border rounded-lg overflow-hidden">
               <div class="flex items-center gap-4 p-4 border-b border-terminal-border">
                 <div class="w-1 h-8 rounded skeleton"></div>
@@ -336,7 +336,7 @@
                 <div class="h-5 w-5 rounded skeleton"></div>
               </div>
               <div class="divide-y divide-terminal-border">
-                <template x-for="j in 2" :key="j">
+                <template x-for="j in skeletonCheckCount" :key="j">
                   <div class="p-4">
                     <div class="flex items-center gap-4">
                       <div class="w-2.5 h-2.5 rounded-full skeleton"></div>
@@ -1323,9 +1323,11 @@
         filteredHistory: [],
         lastUpdated: new Date(),
         isLive: true,
-        expandedChecks: [],
-        expandedGroups: [],
+        expandedChecks: JSON.parse(localStorage.getItem('gocheck_expandedChecks') || '[]'),
+        expandedGroups: JSON.parse(localStorage.getItem('gocheck_expandedGroups') || '[]'),
         timeRange: localStorage.getItem('gocheck_timeRange') || '1d',
+        skeletonGroupCount: parseInt(localStorage.getItem('gocheck_groupCount') || '3'),
+        skeletonCheckCount: parseInt(localStorage.getItem('gocheck_checkCount') || '2'),
         ranges: ['15m', '30m', '60m', '1d', '30d'],
         settings: { discord_webhook_url: '', gotify_server_url: '', gotify_token: '', tailscale_api_key: '', tailscale_tailnet: '' },
         testingWebhook: false,
@@ -1361,7 +1363,13 @@
           await this.checkAuth();
           if (this.isAuthenticated) {
             await Promise.all([this.loadData(), this.loadSettings(), this.loadGroups(), this.loadTags()]);
-            this.expandedGroups = this.groupedChecks.map(g => g.id);
+
+            // If no expanded groups saved, expand all by default
+            if (this.expandedGroups.length === 0) {
+              this.expandedGroups = this.groupedChecks.map(g => g.id);
+              this.saveExpandState();
+            }
+
             this.connectSSE();
             setInterval(() => this.loadStats(), 60000);
 
@@ -1775,6 +1783,13 @@
             this.groupedChecks = await groupedRes.json() || [];
             this.stats = await statsRes.json();
             console.log('Loaded', this.groupedChecks.length, 'groups');
+
+            // Save counts for skeleton rendering
+            localStorage.setItem('gocheck_groupCount', this.groupedChecks.length.toString());
+            const totalChecks = this.groupedChecks.reduce((sum, g) => sum + (g.checks?.length || 0), 0);
+            const avgChecksPerGroup = this.groupedChecks.length > 0 ? Math.ceil(totalChecks / this.groupedChecks.length) : 2;
+            localStorage.setItem('gocheck_checkCount', avgChecksPerGroup.toString());
+
             this.lastUpdated = new Date();
             this.isLive = true;
             this.hasLoaded = true;
@@ -1784,6 +1799,11 @@
           } finally {
             this.loadingChecks = false;
           }
+        },
+
+        saveExpandState() {
+          localStorage.setItem('gocheck_expandedChecks', JSON.stringify(this.expandedChecks));
+          localStorage.setItem('gocheck_expandedGroups', JSON.stringify(this.expandedGroups));
         },
 
         async loadGroups() {
@@ -1943,11 +1963,13 @@
         toggleExpand(checkId) {
           const idx = this.expandedChecks.indexOf(checkId);
           idx === -1 ? this.expandedChecks.push(checkId) : this.expandedChecks.splice(idx, 1);
+          this.saveExpandState();
         },
 
         toggleGroupExpand(groupId) {
           const idx = this.expandedGroups.indexOf(groupId);
           idx === -1 ? this.expandedGroups.push(groupId) : this.expandedGroups.splice(idx, 1);
+          this.saveExpandState();
         },
 
         setTimeRange(range) {
