@@ -46,4 +46,31 @@ type DB interface {
 	DeleteTag(id int64) error
 	GetCheckTags(checkID int64) ([]models.Tag, error)
 	SetCheckTags(checkID int64, tagIDs []int64) error
+
+	// User operations
+	GetUserByUsername(username string) (*models.User, error)
+	GetUserByID(id int64) (*models.User, error)
+	CreateUser(u *models.User) error
+	HasUsers() (bool, error)
+
+	// API Key operations
+	CreateAPIKey(key *models.APIKey) error
+	GetAPIKeyByHash(keyHash string) (*models.APIKey, error)
+	GetAPIKeysByUserID(userID int64) ([]models.APIKey, error)
+	UpdateAPIKeyLastUsed(id int64) error
+	DeleteAPIKey(id int64) error
+
+	// Session operations
+	CreateSession(session *models.Session) error
+	GetSessionByToken(token string) (*models.Session, error)
+	DeleteSession(token string) error
+	DeleteExpiredSessions() error
+	DeleteUserSessions(userID int64) error
+
+	// WebAuthn Credential operations
+	CreateWebAuthnCredential(cred *models.WebAuthnCredential) error
+	GetWebAuthnCredentialsByUserID(userID int64) ([]models.WebAuthnCredential, error)
+	GetWebAuthnCredentialByID(credID []byte) (*models.WebAuthnCredential, error)
+	UpdateWebAuthnCredentialSignCount(credID []byte, signCount uint32) error
+	DeleteWebAuthnCredential(id int64) error
 }

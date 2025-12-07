@@ -91,6 +91,55 @@ func (d *SQLiteDB) initSchema() error {
 		value TEXT
 	);`
 
+	usersTable := `
+	CREATE TABLE IF NOT EXISTS users (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		username TEXT NOT NULL UNIQUE,
+		password_hash TEXT NOT NULL,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);`
+
+	apiKeysTable := `
+	CREATE TABLE IF NOT EXISTS api_keys (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id INTEGER NOT NULL,
+		name TEXT NOT NULL,
+		key_hash TEXT NOT NULL UNIQUE,
+		last_used_at DATETIME,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+	);`
+
+	sessionsTable := `
+	CREATE TABLE IF NOT EXISTS sessions (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		token TEXT NOT NULL UNIQUE,
+		user_id INTEGER NOT NULL,
+		username TEXT NOT NULL,
+		expires_at DATETIME NOT NULL,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+	);
+	CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
+	CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);`
+
+	webauthnCredsTable := `
+	CREATE TABLE IF NOT EXISTS webauthn_credentials (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id INTEGER NOT NULL,
+		credential_id BLOB NOT NULL UNIQUE,
+		public_key BLOB NOT NULL,
+		attestation_type TEXT NOT NULL,
+		aaguid BLOB,
+		sign_count INTEGER NOT NULL DEFAULT 0,
+		clone_warning BOOLEAN NOT NULL DEFAULT 0,
+		name TEXT NOT NULL,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+	);
+	CREATE INDEX IF NOT EXISTS idx_webauthn_creds_user_id ON webauthn_credentials(user_id);
+	CREATE INDEX IF NOT EXISTS idx_webauthn_creds_credential_id ON webauthn_credentials(credential_id);`
+
 	groupsTable := `
 	CREATE TABLE IF NOT EXISTS groups (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -131,6 +180,18 @@ func (d *SQLiteDB) initSchema() error {
 		return err
 	}
 	if _, err := d.db.Exec(settingsTable); err != nil {
+		return err
+	}
+	if _, err := d.db.Exec(usersTable); err != nil {
+		return err
+	}
+	if _, err := d.db.Exec(apiKeysTable); err != nil {
+		return err
+	}
+	if _, err := d.db.Exec(sessionsTable); err != nil {
+		return err
+	}
+	if _, err := d.db.Exec(webauthnCredsTable); err != nil {
 		return err
 	}
 	if _, err := d.db.Exec(groupsTable); err != nil {
@@ -698,4 +759,217 @@ func (d *SQLiteDB) SetCheckTags(checkID int64, tagIDs []int64) error {
 		}
 	}
 	return nil
+}
+
+func (d *SQLiteDB) GetUserByUsername(username string) (*models.User, error) {
+	var u models.User
+	err := d.db.QueryRow(`SELECT id, username, password_hash, created_at FROM users WHERE username = ?`, username).
+		Scan(&u.ID, &u.Username, &u.PasswordHash, &u.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
+func (d *SQLiteDB) GetUserByID(id int64) (*models.User, error) {
+	var u models.User
+	err := d.db.QueryRow(`SELECT id, username, password_hash, created_at FROM users WHERE id = ?`, id).
+		Scan(&u.ID, &u.Username, &u.PasswordHash, &u.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
+func (d *SQLiteDB) CreateUser(u *models.User) error {
+	result, err := d.db.Exec(`INSERT INTO users (username, password_hash) VALUES (?, ?)`, u.Username, u.PasswordHash)
+	if err != nil {
+		return err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	u.ID = id
+	u.CreatedAt = time.Now()
+	return nil
+}
+
+func (d *SQLiteDB) HasUsers() (bool, error) {
+	var count int
+	err := d.db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (d *SQLiteDB) CreateAPIKey(key *models.APIKey) error {
+	result, err := d.db.Exec(`INSERT INTO api_keys (user_id, name, key_hash) VALUES (?, ?, ?)`, 
+		key.UserID, key.Name, key.KeyHash)
+	if err != nil {
+		return err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	key.ID = id
+	key.CreatedAt = time.Now()
+	return nil
+}
+
+func (d *SQLiteDB) GetAPIKeyByHash(keyHash string) (*models.APIKey, error) {
+	var k models.APIKey
+	var lastUsedAt sql.NullTime
+	err := d.db.QueryRow(`SELECT id, user_id, name, key_hash, last_used_at, created_at FROM api_keys WHERE key_hash = ?`, 
+		keyHash).Scan(&k.ID, &k.UserID, &k.Name, &k.KeyHash, &lastUsedAt, &k.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if lastUsedAt.Valid {
+		k.LastUsedAt = &lastUsedAt.Time
+	}
+	return &k, nil
+}
+
+func (d *SQLiteDB) GetAPIKeysByUserID(userID int64) ([]models.APIKey, error) {
+	rows, err := d.db.Query(`SELECT id, user_id, name, key_hash, last_used_at, created_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC`, 
+		userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var keys []models.APIKey
+	for rows.Next() {
+		var k models.APIKey
+		var lastUsedAt sql.NullTime
+		if err := rows.Scan(&k.ID, &k.UserID, &k.Name, &k.KeyHash, &lastUsedAt, &k.CreatedAt); err != nil {
+			return nil, err
+		}
+		if lastUsedAt.Valid {
+			k.LastUsedAt = &lastUsedAt.Time
+		}
+		keys = append(keys, k)
+	}
+	return keys, rows.Err()
+}
+
+func (d *SQLiteDB) UpdateAPIKeyLastUsed(id int64) error {
+	_, err := d.db.Exec(`UPDATE api_keys SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?`, id)
+	return err
+}
+
+func (d *SQLiteDB) DeleteAPIKey(id int64) error {
+	_, err := d.db.Exec(`DELETE FROM api_keys WHERE id = ?`, id)
+	return err
+}
+
+func (d *SQLiteDB) CreateSession(session *models.Session) error {
+	result, err := d.db.Exec(`INSERT INTO sessions (token, user_id, username, expires_at) VALUES (?, ?, ?, ?)`,
+		session.Token, session.UserID, session.Username, session.ExpiresAt)
+	if err != nil {
+		return err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	session.ID = id
+	session.CreatedAt = time.Now()
+	return nil
+}
+
+func (d *SQLiteDB) GetSessionByToken(token string) (*models.Session, error) {
+	var s models.Session
+	err := d.db.QueryRow(`SELECT id, token, user_id, username, expires_at, created_at FROM sessions WHERE token = ? AND expires_at > CURRENT_TIMESTAMP`,
+		token).Scan(&s.ID, &s.Token, &s.UserID, &s.Username, &s.ExpiresAt, &s.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+func (d *SQLiteDB) DeleteSession(token string) error {
+	_, err := d.db.Exec(`DELETE FROM sessions WHERE token = ?`, token)
+	return err
+}
+
+func (d *SQLiteDB) DeleteExpiredSessions() error {
+	_, err := d.db.Exec(`DELETE FROM sessions WHERE expires_at <= CURRENT_TIMESTAMP`)
+	return err
+}
+
+func (d *SQLiteDB) DeleteUserSessions(userID int64) error {
+	_, err := d.db.Exec(`DELETE FROM sessions WHERE user_id = ?`, userID)
+	return err
+}
+
+func (d *SQLiteDB) CreateWebAuthnCredential(cred *models.WebAuthnCredential) error {
+	result, err := d.db.Exec(`INSERT INTO webauthn_credentials (user_id, credential_id, public_key, attestation_type, aaguid, sign_count, clone_warning, name) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		cred.UserID, cred.CredentialID, cred.PublicKey, cred.AttestationType, cred.AAGUID, cred.SignCount, cred.CloneWarning, cred.Name)
+	if err != nil {
+		return err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	cred.ID = id
+	cred.CreatedAt = time.Now()
+	return nil
+}
+
+func (d *SQLiteDB) GetWebAuthnCredentialsByUserID(userID int64) ([]models.WebAuthnCredential, error) {
+	rows, err := d.db.Query(`SELECT id, user_id, credential_id, public_key, attestation_type, aaguid, sign_count, clone_warning, name, created_at FROM webauthn_credentials WHERE user_id = ?`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var creds []models.WebAuthnCredential
+	for rows.Next() {
+		var c models.WebAuthnCredential
+		if err := rows.Scan(&c.ID, &c.UserID, &c.CredentialID, &c.PublicKey, &c.AttestationType, &c.AAGUID, &c.SignCount, &c.CloneWarning, &c.Name, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		creds = append(creds, c)
+	}
+	return creds, rows.Err()
+}
+
+func (d *SQLiteDB) GetWebAuthnCredentialByID(credID []byte) (*models.WebAuthnCredential, error) {
+	var c models.WebAuthnCredential
+	err := d.db.QueryRow(`SELECT id, user_id, credential_id, public_key, attestation_type, aaguid, sign_count, clone_warning, name, created_at FROM webauthn_credentials WHERE credential_id = ?`, credID).
+		Scan(&c.ID, &c.UserID, &c.CredentialID, &c.PublicKey, &c.AttestationType, &c.AAGUID, &c.SignCount, &c.CloneWarning, &c.Name, &c.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+func (d *SQLiteDB) UpdateWebAuthnCredentialSignCount(credID []byte, signCount uint32) error {
+	_, err := d.db.Exec(`UPDATE webauthn_credentials SET sign_count = ? WHERE credential_id = ?`, signCount, credID)
+	return err
+}
+
+func (d *SQLiteDB) DeleteWebAuthnCredential(id int64) error {
+	_, err := d.db.Exec(`DELETE FROM webauthn_credentials WHERE id = ?`, id)
+	return err
 }

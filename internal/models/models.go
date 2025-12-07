@@ -268,3 +268,56 @@ type Settings struct {
 	TailscaleAPIKey   string `json:"tailscale_api_key"`
 	TailscaleTailnet  string `json:"tailscale_tailnet"`
 }
+
+type User struct {
+	ID           int64     `json:"id"`
+	Username     string    `json:"username"`
+	PasswordHash string    `json:"-"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type LoginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type CreateUserRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type APIKey struct {
+	ID          int64     `json:"id"`
+	UserID      int64     `json:"user_id"`
+	Name        string    `json:"name"`
+	Key         string    `json:"key,omitempty"`
+	KeyHash     string    `json:"-"`
+	LastUsedAt  *time.Time `json:"last_used_at,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+type CreateAPIKeyRequest struct {
+	Name string `json:"name"`
+}
+
+type Session struct {
+	ID        int64     `json:"id"`
+	Token     string    `json:"token"`
+	UserID    int64     `json:"user_id"`
+	Username  string    `json:"username"`
+	ExpiresAt time.Time `json:"expires_at"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type WebAuthnCredential struct {
+	ID              int64     `json:"id"`
+	UserID          int64     `json:"user_id"`
+	CredentialID    []byte    `json:"credential_id"`
+	PublicKey       []byte    `json:"public_key"`
+	AttestationType string    `json:"attestation_type"`
+	AAGUID          []byte    `json:"aaguid"`
+	SignCount       uint32    `json:"sign_count"`
+	CloneWarning    bool      `json:"clone_warning"`
+	Name            string    `json:"name"`
+	CreatedAt       time.Time `json:"created_at"`
+}

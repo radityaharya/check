@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"gocheck/internal/api"
+	"gocheck/internal/auth"
 	"gocheck/internal/checker"
 	"gocheck/internal/db"
 	"gocheck/internal/notifier"
@@ -118,32 +119,70 @@ func main() {
 	defer engine.Stop()
 
 	handlers := api.NewHandlers(database, engine, notifiers)
+	authManager := auth.NewAuthManager(database)
+
+	rpID := os.Getenv("WEBAUTHN_RP_ID")
+	if rpID == "" {
+		rpID = "localhost"
+	}
+	rpOrigin := os.Getenv("WEBAUTHN_RP_ORIGIN")
+	if rpOrigin == "" {
+		rpOrigin = "http://localhost:" + config.Server.Port
+	}
+
+	webAuthnManager, err := auth.NewWebAuthnManager(rpID, rpOrigin, database)
+	if err != nil {
+		log.Fatalf("Failed to initialize WebAuthn: %v", err)
+	}
+
+	auth.SetGlobalManagers(authManager, webAuthnManager)
 
 	router := mux.NewRouter()
 
-	router.HandleFunc("/api/checks", handlers.GetChecks).Methods("GET")
-	router.HandleFunc("/api/checks", handlers.CreateCheck).Methods("POST")
-	router.HandleFunc("/api/checks/{id}", handlers.UpdateCheck).Methods("PUT")
-	router.HandleFunc("/api/checks/{id}", handlers.DeleteCheck).Methods("DELETE")
-	router.HandleFunc("/api/checks/{id}/history", handlers.GetCheckHistory).Methods("GET")
-	router.HandleFunc("/api/checks/{id}/trigger", handlers.TriggerCheck).Methods("POST")
-	router.HandleFunc("/api/checks/grouped", handlers.GetGroupedChecks).Methods("GET")
-	router.HandleFunc("/api/stream/updates", handlers.StreamCheckUpdates).Methods("GET")
-	router.HandleFunc("/api/stats", handlers.GetStats).Methods("GET")
-	router.HandleFunc("/api/settings", handlers.GetSettings).Methods("GET")
-	router.HandleFunc("/api/settings", handlers.UpdateSettings).Methods("PUT")
-	router.HandleFunc("/api/settings/test-webhook", handlers.TestWebhook).Methods("POST")
-	router.HandleFunc("/api/settings/test-gotify", handlers.TestGotify).Methods("POST")
-	router.HandleFunc("/api/settings/test-tailscale", handlers.TestTailscale).Methods("POST")
-	router.HandleFunc("/api/tailscale/devices", handlers.GetTailscaleDevices).Methods("GET")
-	router.HandleFunc("/api/groups", handlers.GetGroups).Methods("GET")
-	router.HandleFunc("/api/groups", handlers.CreateGroup).Methods("POST")
-	router.HandleFunc("/api/groups/{id}", handlers.UpdateGroup).Methods("PUT")
-	router.HandleFunc("/api/groups/{id}", handlers.DeleteGroup).Methods("DELETE")
-	router.HandleFunc("/api/tags", handlers.GetTags).Methods("GET")
-	router.HandleFunc("/api/tags", handlers.CreateTag).Methods("POST")
-	router.HandleFunc("/api/tags/{id}", handlers.UpdateTag).Methods("PUT")
-	router.HandleFunc("/api/tags/{id}", handlers.DeleteTag).Methods("DELETE")
+	// Auth routes (no authentication required)
+	router.HandleFunc("/api/auth/setup/check", authManager.CheckInitialSetup).Methods("GET")
+	router.HandleFunc("/api/auth/setup", authManager.InitialSetup).Methods("POST")
+	router.HandleFunc("/api/auth/login", authManager.Login).Methods("POST")
+	router.HandleFunc("/api/auth/logout", authManager.Logout).Methods("POST")
+	router.HandleFunc("/api/auth/check", authManager.CheckAuth).Methods("GET")
+
+	// Passkey routes
+	router.HandleFunc("/api/auth/passkey/begin-registration", webAuthnManager.BeginRegistration).Methods("POST")
+	router.HandleFunc("/api/auth/passkey/finish-registration", webAuthnManager.FinishRegistration).Methods("POST")
+	router.HandleFunc("/api/auth/passkey/begin-login", webAuthnManager.BeginLogin).Methods("POST")
+	router.HandleFunc("/api/auth/passkey/finish-login", webAuthnManager.FinishLogin).Methods("POST")
+	router.HandleFunc("/api/auth/passkeys", webAuthnManager.GetPasskeys).Methods("GET")
+	router.HandleFunc("/api/auth/passkeys", webAuthnManager.DeletePasskey).Methods("DELETE")
+
+	// API Key management (requires authentication)
+	router.HandleFunc("/api/auth/apikeys", authManager.GetAPIKeys).Methods("GET")
+	router.HandleFunc("/api/auth/apikeys", authManager.CreateAPIKey).Methods("POST")
+	router.HandleFunc("/api/auth/apikeys", authManager.DeleteAPIKey).Methods("DELETE")
+
+	// Protected routes
+	router.HandleFunc("/api/checks", authManager.OptionalAuth(handlers.GetChecks)).Methods("GET")
+	router.HandleFunc("/api/checks", authManager.OptionalAuth(handlers.CreateCheck)).Methods("POST")
+	router.HandleFunc("/api/checks/{id}", authManager.OptionalAuth(handlers.UpdateCheck)).Methods("PUT")
+	router.HandleFunc("/api/checks/{id}", authManager.OptionalAuth(handlers.DeleteCheck)).Methods("DELETE")
+	router.HandleFunc("/api/checks/{id}/history", authManager.OptionalAuth(handlers.GetCheckHistory)).Methods("GET")
+	router.HandleFunc("/api/checks/{id}/trigger", authManager.OptionalAuth(handlers.TriggerCheck)).Methods("POST")
+	router.HandleFunc("/api/checks/grouped", authManager.OptionalAuth(handlers.GetGroupedChecks)).Methods("GET")
+	router.HandleFunc("/api/stream/updates", authManager.OptionalAuth(handlers.StreamCheckUpdates)).Methods("GET")
+	router.HandleFunc("/api/stats", authManager.OptionalAuth(handlers.GetStats)).Methods("GET")
+	router.HandleFunc("/api/settings", authManager.OptionalAuth(handlers.GetSettings)).Methods("GET")
+	router.HandleFunc("/api/settings", authManager.OptionalAuth(handlers.UpdateSettings)).Methods("PUT")
+	router.HandleFunc("/api/settings/test-webhook", authManager.OptionalAuth(handlers.TestWebhook)).Methods("POST")
+	router.HandleFunc("/api/settings/test-gotify", authManager.OptionalAuth(handlers.TestGotify)).Methods("POST")
+	router.HandleFunc("/api/settings/test-tailscale", authManager.OptionalAuth(handlers.TestTailscale)).Methods("POST")
+	router.HandleFunc("/api/tailscale/devices", authManager.OptionalAuth(handlers.GetTailscaleDevices)).Methods("GET")
+	router.HandleFunc("/api/groups", authManager.OptionalAuth(handlers.GetGroups)).Methods("GET")
+	router.HandleFunc("/api/groups", authManager.OptionalAuth(handlers.CreateGroup)).Methods("POST")
+	router.HandleFunc("/api/groups/{id}", authManager.OptionalAuth(handlers.UpdateGroup)).Methods("PUT")
+	router.HandleFunc("/api/groups/{id}", authManager.OptionalAuth(handlers.DeleteGroup)).Methods("DELETE")
+	router.HandleFunc("/api/tags", authManager.OptionalAuth(handlers.GetTags)).Methods("GET")
+	router.HandleFunc("/api/tags", authManager.OptionalAuth(handlers.CreateTag)).Methods("POST")
+	router.HandleFunc("/api/tags/{id}", authManager.OptionalAuth(handlers.UpdateTag)).Methods("PUT")
+	router.HandleFunc("/api/tags/{id}", authManager.OptionalAuth(handlers.DeleteTag)).Methods("DELETE")
 
 	router.PathPrefix("/").Handler(http.FileServer(http.Dir("./web/")))
 

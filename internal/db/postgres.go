@@ -121,6 +121,55 @@ func (d *PostgresDB) initSchema() error {
 		value TEXT
 	);
 
+	-- Users table
+	CREATE TABLE IF NOT EXISTS users (
+		id BIGSERIAL PRIMARY KEY,
+		username TEXT NOT NULL UNIQUE,
+		password_hash TEXT NOT NULL,
+		created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+
+	-- API Keys table
+	CREATE TABLE IF NOT EXISTS api_keys (
+		id BIGSERIAL PRIMARY KEY,
+		user_id BIGINT NOT NULL,
+		name TEXT NOT NULL,
+		key_hash TEXT NOT NULL UNIQUE,
+		last_used_at TIMESTAMP WITH TIME ZONE,
+		created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+	);
+
+	-- Sessions table
+	CREATE TABLE IF NOT EXISTS sessions (
+		id BIGSERIAL PRIMARY KEY,
+		token TEXT NOT NULL UNIQUE,
+		user_id BIGINT NOT NULL,
+		username TEXT NOT NULL,
+		expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+		created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+	);
+	CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
+	CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
+
+	-- WebAuthn Credentials table
+	CREATE TABLE IF NOT EXISTS webauthn_credentials (
+		id BIGSERIAL PRIMARY KEY,
+		user_id BIGINT NOT NULL,
+		credential_id BYTEA NOT NULL UNIQUE,
+		public_key BYTEA NOT NULL,
+		attestation_type TEXT NOT NULL,
+		aaguid BYTEA,
+		sign_count INTEGER NOT NULL DEFAULT 0,
+		clone_warning BOOLEAN NOT NULL DEFAULT false,
+		name TEXT NOT NULL,
+		created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+	);
+	CREATE INDEX IF NOT EXISTS idx_webauthn_creds_user_id ON webauthn_credentials(user_id);
+	CREATE INDEX IF NOT EXISTS idx_webauthn_creds_credential_id ON webauthn_credentials(credential_id);
+
 	-- Indexes for checks table
 	CREATE INDEX IF NOT EXISTS idx_checks_enabled ON checks(enabled) WHERE enabled = true;
 	CREATE INDEX IF NOT EXISTS idx_checks_created_at ON checks(created_at DESC);
@@ -690,4 +739,191 @@ func (d *PostgresDB) SetCheckTags(checkID int64, tagIDs []int64) error {
 	}
 
 	return tx.Commit()
+}
+
+func (d *PostgresDB) GetUserByUsername(username string) (*models.User, error) {
+	var u models.User
+	err := d.db.QueryRow(`SELECT id, username, password_hash, created_at FROM users WHERE username = $1`, username).
+		Scan(&u.ID, &u.Username, &u.PasswordHash, &u.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
+func (d *PostgresDB) GetUserByID(id int64) (*models.User, error) {
+	var u models.User
+	err := d.db.QueryRow(`SELECT id, username, password_hash, created_at FROM users WHERE id = $1`, id).
+		Scan(&u.ID, &u.Username, &u.PasswordHash, &u.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
+func (d *PostgresDB) CreateUser(u *models.User) error {
+	err := d.db.QueryRow(`
+		INSERT INTO users (username, password_hash) VALUES ($1, $2)
+		RETURNING id, created_at
+	`, u.Username, u.PasswordHash).Scan(&u.ID, &u.CreatedAt)
+	return err
+}
+
+func (d *PostgresDB) HasUsers() (bool, error) {
+	var count int
+	err := d.db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (d *PostgresDB) CreateAPIKey(key *models.APIKey) error {
+	err := d.db.QueryRow(`
+		INSERT INTO api_keys (user_id, name, key_hash) VALUES ($1, $2, $3)
+		RETURNING id, created_at
+	`, key.UserID, key.Name, key.KeyHash).Scan(&key.ID, &key.CreatedAt)
+	return err
+}
+
+func (d *PostgresDB) GetAPIKeyByHash(keyHash string) (*models.APIKey, error) {
+	var k models.APIKey
+	var lastUsedAt sql.NullTime
+	err := d.db.QueryRow(`SELECT id, user_id, name, key_hash, last_used_at, created_at FROM api_keys WHERE key_hash = $1`, 
+		keyHash).Scan(&k.ID, &k.UserID, &k.Name, &k.KeyHash, &lastUsedAt, &k.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if lastUsedAt.Valid {
+		k.LastUsedAt = &lastUsedAt.Time
+	}
+	return &k, nil
+}
+
+func (d *PostgresDB) GetAPIKeysByUserID(userID int64) ([]models.APIKey, error) {
+	rows, err := d.db.Query(`SELECT id, user_id, name, key_hash, last_used_at, created_at FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC`, 
+		userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var keys []models.APIKey
+	for rows.Next() {
+		var k models.APIKey
+		var lastUsedAt sql.NullTime
+		if err := rows.Scan(&k.ID, &k.UserID, &k.Name, &k.KeyHash, &lastUsedAt, &k.CreatedAt); err != nil {
+			return nil, err
+		}
+		if lastUsedAt.Valid {
+			k.LastUsedAt = &lastUsedAt.Time
+		}
+		keys = append(keys, k)
+	}
+	return keys, rows.Err()
+}
+
+func (d *PostgresDB) UpdateAPIKeyLastUsed(id int64) error {
+	_, err := d.db.Exec(`UPDATE api_keys SET last_used_at = CURRENT_TIMESTAMP WHERE id = $1`, id)
+	return err
+}
+
+func (d *PostgresDB) DeleteAPIKey(id int64) error {
+	_, err := d.db.Exec(`DELETE FROM api_keys WHERE id = $1`, id)
+	return err
+}
+
+func (d *PostgresDB) CreateSession(session *models.Session) error {
+	err := d.db.QueryRow(`
+		INSERT INTO sessions (token, user_id, username, expires_at) VALUES ($1, $2, $3, $4)
+		RETURNING id, created_at
+	`, session.Token, session.UserID, session.Username, session.ExpiresAt).Scan(&session.ID, &session.CreatedAt)
+	return err
+}
+
+func (d *PostgresDB) GetSessionByToken(token string) (*models.Session, error) {
+	var s models.Session
+	err := d.db.QueryRow(`SELECT id, token, user_id, username, expires_at, created_at FROM sessions WHERE token = $1 AND expires_at > CURRENT_TIMESTAMP`,
+		token).Scan(&s.ID, &s.Token, &s.UserID, &s.Username, &s.ExpiresAt, &s.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+func (d *PostgresDB) DeleteSession(token string) error {
+	_, err := d.db.Exec(`DELETE FROM sessions WHERE token = $1`, token)
+	return err
+}
+
+func (d *PostgresDB) DeleteExpiredSessions() error {
+	_, err := d.db.Exec(`DELETE FROM sessions WHERE expires_at <= CURRENT_TIMESTAMP`)
+	return err
+}
+
+func (d *PostgresDB) DeleteUserSessions(userID int64) error {
+	_, err := d.db.Exec(`DELETE FROM sessions WHERE user_id = $1`, userID)
+	return err
+}
+
+func (d *PostgresDB) CreateWebAuthnCredential(cred *models.WebAuthnCredential) error {
+	err := d.db.QueryRow(`
+		INSERT INTO webauthn_credentials (user_id, credential_id, public_key, attestation_type, aaguid, sign_count, clone_warning, name)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id, created_at
+	`, cred.UserID, cred.CredentialID, cred.PublicKey, cred.AttestationType, cred.AAGUID, cred.SignCount, cred.CloneWarning, cred.Name).Scan(&cred.ID, &cred.CreatedAt)
+	return err
+}
+
+func (d *PostgresDB) GetWebAuthnCredentialsByUserID(userID int64) ([]models.WebAuthnCredential, error) {
+	rows, err := d.db.Query(`SELECT id, user_id, credential_id, public_key, attestation_type, aaguid, sign_count, clone_warning, name, created_at FROM webauthn_credentials WHERE user_id = $1`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var creds []models.WebAuthnCredential
+	for rows.Next() {
+		var c models.WebAuthnCredential
+		if err := rows.Scan(&c.ID, &c.UserID, &c.CredentialID, &c.PublicKey, &c.AttestationType, &c.AAGUID, &c.SignCount, &c.CloneWarning, &c.Name, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		creds = append(creds, c)
+	}
+	return creds, rows.Err()
+}
+
+func (d *PostgresDB) GetWebAuthnCredentialByID(credID []byte) (*models.WebAuthnCredential, error) {
+	var c models.WebAuthnCredential
+	err := d.db.QueryRow(`SELECT id, user_id, credential_id, public_key, attestation_type, aaguid, sign_count, clone_warning, name, created_at FROM webauthn_credentials WHERE credential_id = $1`, credID).
+		Scan(&c.ID, &c.UserID, &c.CredentialID, &c.PublicKey, &c.AttestationType, &c.AAGUID, &c.SignCount, &c.CloneWarning, &c.Name, &c.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+func (d *PostgresDB) UpdateWebAuthnCredentialSignCount(credID []byte, signCount uint32) error {
+	_, err := d.db.Exec(`UPDATE webauthn_credentials SET sign_count = $1 WHERE credential_id = $2`, signCount, credID)
+	return err
+}
+
+func (d *PostgresDB) DeleteWebAuthnCredential(id int64) error {
+	_, err := d.db.Exec(`DELETE FROM webauthn_credentials WHERE id = $1`, id)
+	return err
 }

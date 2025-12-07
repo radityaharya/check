@@ -107,943 +107,1202 @@
 </head>
 
 <body class="bg-terminal-bg text-terminal-text font-mono min-h-screen">
-  <div x-data="app()" class="min-h-screen">
-    <header class="bg-terminal-surface border-b border-terminal-border sticky top-0 z-40">
-      <div class="container mx-auto px-6 py-4 flex justify-between items-center">
-        <div class="flex items-center gap-3">
-          <!-- <div class="w-3 h-3 rounded-full bg-terminal-green" :class="isLive ? 'pulse-dot' : ''"></div> -->
-          <span class="text-terminal-muted text-xs">v1.0</span>
-        </div>
-        <div class="flex items-center gap-4">
-          <div class="flex items-center gap-2 text-xs">
-            <span class="text-terminal-muted">synced</span>
-            <span class="text-terminal-green font-mono" x-text="lastUpdated.toLocaleTimeString()"></span>
-            <span class="w-2 h-2 rounded-full"
-              :class="isLive ? 'bg-terminal-green pulse-dot' : 'bg-terminal-muted'"></span>
+  <div x-data="app()" class="min-h-screen" x-cloak>
+    <!-- Initial Setup Screen -->
+    <div x-show="!authChecked" class="flex items-center justify-center min-h-screen">
+      <div class="text-terminal-muted">
+        <svg class="animate-spin h-8 w-8 mx-auto" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor"
+            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+          </path>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Setup Screen (First Time) -->
+    <div x-show="authChecked && needsSetup && !isAuthenticated"
+      class="flex items-center justify-center min-h-screen px-4">
+      <div class="w-full max-w-md">
+        <div class="bg-terminal-surface border border-terminal-border rounded-lg p-8">
+          <div class="text-center mb-8">
+            <h1 class="text-2xl font-bold text-terminal-text mb-2">Welcome to Gocheck</h1>
+            <p class="text-terminal-muted text-sm">Create your admin account to get started</p>
           </div>
-          <button @click="showSettingsModal = true"
-            class="text-terminal-muted hover:text-terminal-text transition p-2 rounded hover:bg-terminal-border"
-            title="Settings">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z">
-              </path>
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-            </svg>
-          </button>
-        </div>
-      </div>
-    </header>
 
-    <main class="container mx-auto px-6 py-8">
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10" x-show="!hasLoaded" x-cloak>
-        <div class="col-span-full flex flex-wrap items-center gap-2 text-xs mb-2 opacity-70">
-          <div class="h-6 w-32 rounded skeleton"></div>
-          <div class="h-7 w-14 rounded skeleton"></div>
-          <div class="h-7 w-14 rounded skeleton"></div>
-          <div class="h-7 w-14 rounded skeleton"></div>
-          <div class="h-7 w-14 rounded skeleton"></div>
-          <div class="h-7 w-14 rounded skeleton"></div>
-        </div>
-        <template x-for="i in 4" :key="i">
-          <div class="bg-terminal-surface border border-terminal-border rounded-lg p-4">
-            <div class="h-3 w-16 rounded skeleton mb-3"></div>
-            <div class="h-7 w-24 rounded skeleton"></div>
-          </div>
-        </template>
-      </div>
-
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10" x-show="stats && hasLoaded" x-cloak>
-        <div class="col-span-full flex flex-wrap items-center gap-2 text-xs mb-2">
-          <span class="text-terminal-muted uppercase tracking-widest">Time Range</span>
-          <template x-for="range in ranges" :key="range">
-            <button type="button" @click="setTimeRange(range)"
-              class="px-3 py-1 rounded border text-[10px] uppercase tracking-wide"
-              :class="timeRange === range ? 'border-terminal-green text-terminal-green' : 'border-terminal-border text-terminal-muted hover:text-terminal-text'"
-              x-text="range"></button>
-          </template>
-        </div>
-        <div
-          class="bg-terminal-surface border border-terminal-border rounded-lg p-4 hover:border-terminal-muted transition">
-          <div class="text-[10px] text-terminal-muted uppercase tracking-widest mb-1">total</div>
-          <div class="text-2xl font-bold" x-text="stats.total_checks"></div>
-        </div>
-        <div
-          class="bg-terminal-surface border border-terminal-border rounded-lg p-4 hover:border-terminal-muted transition">
-          <div class="text-[10px] text-terminal-muted uppercase tracking-widest mb-1">active</div>
-          <div class="text-2xl font-bold text-terminal-purple" x-text="stats.active_checks"></div>
-        </div>
-        <div
-          class="bg-terminal-surface border border-terminal-border rounded-lg p-4 hover:border-terminal-muted transition">
-          <div class="text-[10px] text-terminal-muted uppercase tracking-widest mb-1">up</div>
-          <div class="text-2xl font-bold text-terminal-green" x-text="stats.up_checks"></div>
-        </div>
-        <div
-          class="bg-terminal-surface border border-terminal-border rounded-lg p-4 hover:border-terminal-muted transition">
-          <div class="text-[10px] text-terminal-muted uppercase tracking-widest mb-1">uptime</div>
-          <div class="text-2xl font-bold"
-            :class="stats.total_uptime >= 99 ? 'text-terminal-green' : (stats.total_uptime >= 95 ? 'text-terminal-yellow' : 'text-terminal-red')"
-            x-text="stats.total_uptime.toFixed(2) + '%'"></div>
-        </div>
-      </div>
-
-      <div class="flex justify-between items-center mb-6 flex-wrap gap-4">
-        <div class="flex items-center gap-2 text-sm text-terminal-muted">
-          <span class="text-terminal-green">$</span> monitors
-        </div>
-        <div class="flex gap-2">
-          <button @click="showGroupModal = true"
-            class="bg-terminal-border text-terminal-text px-4 py-2 rounded text-sm font-bold hover:bg-terminal-muted transition flex items-center gap-2">
-            <span>+</span> group
-          </button>
-          <button @click="showTagModal = true"
-            class="bg-terminal-border text-terminal-text px-4 py-2 rounded text-sm font-bold hover:bg-terminal-muted transition flex items-center gap-2">
-            <span>+</span> tag
-          </button>
-          <button @click="openAddModal()"
-            class="bg-terminal-green text-terminal-bg px-4 py-2 rounded text-sm font-bold hover:opacity-90 transition flex items-center gap-2">
-            <span>+</span> monitor
-          </button>
-        </div>
-      </div>
-
-      <!-- Grouped Monitors -->
-      <div class="space-y-6" x-show="!hasLoaded" x-cloak>
-        <template x-for="i in 3" :key="i">
-          <div class="bg-terminal-surface border border-terminal-border rounded-lg overflow-hidden">
-            <div class="flex items-center gap-4 p-4 border-b border-terminal-border">
-              <div class="w-1 h-8 rounded skeleton"></div>
-              <div class="w-2.5 h-2.5 rounded-full skeleton"></div>
-              <div class="flex-grow">
-                <div class="flex items-center gap-3">
-                  <div class="h-4 w-32 rounded skeleton"></div>
-                  <div class="h-4 w-20 rounded skeleton"></div>
-                </div>
-              </div>
-              <div class="h-5 w-5 rounded skeleton"></div>
-            </div>
-            <div class="divide-y divide-terminal-border">
-              <template x-for="j in 2" :key="j">
-                <div class="p-4">
-                  <div class="flex items-center gap-4">
-                    <div class="w-2.5 h-2.5 rounded-full skeleton"></div>
-                    <div class="flex-grow">
-                      <div class="h-4 w-40 rounded skeleton mb-2"></div>
-                      <div class="h-3 w-64 rounded skeleton"></div>
-                    </div>
-                    <div class="hidden sm:block h-4 w-12 rounded skeleton"></div>
-                    <div class="hidden sm:block h-4 w-16 rounded skeleton"></div>
-                  </div>
-                </div>
-              </template>
-            </div>
-          </div>
-        </template>
-      </div>
-
-      <div class="space-y-6" x-show="hasLoaded">
-        <template x-for="group in groupedChecks" :key="group.id">
-          <div class="bg-terminal-surface border border-terminal-border rounded-lg overflow-hidden">
-            <!-- Group Header -->
-            <div
-              class="flex items-center gap-4 p-4 cursor-pointer border-b border-terminal-border hover:bg-terminal-border/30 transition"
-              @click="toggleGroupExpand(group.id)">
-              <div class="w-1 h-8 rounded" :class="group.is_up ? 'bg-terminal-green' : 'bg-terminal-red'"></div>
-              <div class="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                :class="group.is_up ? 'bg-terminal-green' : 'bg-terminal-red glow-red'"></div>
-              <div class="flex-grow">
-                <div class="flex items-center gap-3">
-                  <span class="font-bold text-terminal-text" x-text="group.name"></span>
-                  <span class="text-[10px] px-2 py-0.5 rounded bg-terminal-border text-terminal-muted"
-                    x-text="group.checks.length + ' monitors'"></span>
-                  <span x-show="!group.is_up"
-                    class="text-[10px] px-2 py-0.5 rounded bg-terminal-red/20 text-terminal-red"
-                    x-text="group.down_count + ' down'"></span>
-                </div>
-              </div>
-              <div class="flex items-center gap-4 flex-shrink-0">
-                <button @click.stop="editGroup(group)" x-show="group.id !== 0"
-                  class="text-terminal-muted hover:text-terminal-text p-1">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z">
-                    </path>
-                  </svg>
-                </button>
-                <svg class="w-5 h-5 text-terminal-muted transition-transform"
-                  :class="expandedGroups.includes(group.id) ? '' : '-rotate-90'" fill="none" stroke="currentColor"
-                  viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                </svg>
-              </div>
-            </div>
-
-            <!-- Group Checks -->
-            <div x-show="expandedGroups.includes(group.id)" x-collapse>
-              <div class="divide-y divide-terminal-border">
-                <template x-for="check in group.checks" :key="check.id">
-                  <div class="group hover:bg-terminal-border/20 transition">
-                    <div class="flex items-center gap-4 p-4 cursor-pointer" @click="toggleExpand(check.id)"
-                      :class="!check.enabled && 'opacity-60'">
-                      <div class="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                        :class="!check.enabled ? 'bg-terminal-yellow' : (check.is_up ? 'bg-terminal-green glow-green' : 'bg-terminal-red glow-red')">
-                      </div>
-                      <div class="flex-grow min-w-0">
-                        <div class="flex items-center gap-2 flex-wrap">
-                          <span class="font-bold text-terminal-text truncate" x-text="check.name"></span>
-                          <span x-show="!check.enabled"
-                            class="text-[10px] px-2 py-0.5 rounded uppercase font-bold flex-shrink-0 bg-terminal-yellow/20 text-terminal-yellow">paused</span>
-                          <span class="text-[10px] px-2 py-0.5 rounded uppercase font-bold flex-shrink-0"
-                            :class="getCheckTypeClass(check.type)" x-text="check.type"></span>
-                          <template x-for="tag in (check.tags || [])" :key="tag.id">
-                            <span class="text-[10px] px-2 py-0.5 rounded flex-shrink-0"
-                              :style="`background: ${tag.color}20; color: ${tag.color}`" x-text="tag.name"></span>
-                          </template>
-                        </div>
-                        <div class="text-xs text-terminal-muted truncate" x-text="getCheckTarget(check)"></div>
-                      </div>
-                      <div class="flex items-center gap-6 flex-shrink-0">
-                        <div class="text-right hidden sm:block">
-                          <div class="text-xs text-terminal-muted">latency</div>
-                          <div class="font-bold"
-                            :class="(check.last_status?.response_time_ms || 0) > 1000 ? 'text-terminal-yellow' : 'text-terminal-text'"
-                            x-text="(check.last_status?.response_time_ms || 0) + 'ms'"></div>
-                        </div>
-                        <div class="text-right hidden sm:block">
-                          <div class="text-xs text-terminal-muted">checked</div>
-                          <div x-text="timeAgo(check.last_checked_at)"></div>
-                        </div>
-                        <svg class="w-5 h-5 text-terminal-muted transition-transform"
-                          :class="expandedChecks.includes(check.id) ? 'rotate-180' : ''" fill="none"
-                          stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7">
-                          </path>
-                        </svg>
-                      </div>
-                    </div>
-
-                    <div x-show="expandedChecks.includes(check.id)" x-collapse
-                      class="border-t border-terminal-border bg-terminal-bg/50">
-                      <div class="p-5">
-                        <div class="h-24 w-full mb-4 relative" :data-check-id="check.id"
-                          x-effect="if(expandedChecks.includes(check.id) && check.history) { renderChart($el, check.history, check.is_up); }"
-                          x-init="$watch('timeRange', () => { if(expandedChecks.includes(check.id)) { setTimeout(() => { const updatedCheck = groupedChecks.flatMap(g => g.checks || []).find(c => c.id === check.id); if(updatedCheck && updatedCheck.history) renderChart($el, updatedCheck.history, updatedCheck.is_up); }, 200); } });">
-                          <canvas class="w-full h-full"></canvas>
-                        </div>
-                        <div class="flex justify-between items-center text-xs mb-3">
-                          <span class="text-terminal-muted">response time history</span>
-                          <span class="text-terminal-muted">interval: <span class="text-terminal-text"
-                              x-text="check.interval_seconds + 's'"></span></span>
-                        </div>
-                        <div
-                          class="flex gap-[2px] h-5 w-full rounded bg-terminal-border/50 mb-4 overflow-visible relative">
-                          <template x-for="(status, index) in getStatusBar(check.history, check)" :key="index">
-                            <div class="flex-1 h-full transition-all hover:opacity-70 cursor-pointer relative group/bar"
-                              :class="status.success ? 'bg-terminal-green' : (status.empty ? 'bg-terminal-border' : 'bg-terminal-red')">
-                              <div
-                                class="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-terminal-bg border border-terminal-border text-[10px] px-2 py-1 rounded opacity-0 group-hover/bar:opacity-100 pointer-events-none whitespace-nowrap z-10">
-                                <span x-text="status.empty ? 'N/A' : (status.success ? 'UP' : 'DOWN')"></span>
-                                <span class="text-terminal-muted mx-1">|</span>
-                                <span class="text-terminal-muted" x-text="status.time || ''"></span>
-                              </div>
-                            </div>
-                          </template>
-                        </div>
-                        <div class="flex gap-2">
-                          <button @click.stop="triggerCheckNow(check.id)"
-                            class="text-[10px] bg-terminal-green/20 hover:bg-terminal-green/30 text-terminal-green px-3 py-1.5 rounded uppercase tracking-wide"
-                            :disabled="!check.enabled">check now</button>
-                          <button @click.stop="toggleCheckEnabled(check)"
-                            class="text-[10px] px-3 py-1.5 rounded uppercase tracking-wide"
-                            :class="check.enabled ? 'bg-terminal-yellow/20 hover:bg-terminal-yellow/30 text-terminal-yellow' : 'bg-terminal-green/20 hover:bg-terminal-green/30 text-terminal-green'"
-                            x-text="check.enabled ? 'pause' : 'resume'"></button>
-                          <button @click.stop="openEditModal(check)"
-                            class="text-[10px] bg-terminal-border hover:bg-terminal-muted text-terminal-text px-3 py-1.5 rounded uppercase tracking-wide">edit</button>
-                          <button @click.stop="openHistoryModal(check)"
-                            class="text-[10px] bg-terminal-border hover:bg-terminal-muted text-terminal-text px-3 py-1.5 rounded uppercase tracking-wide">changes
-                            log</button>
-                          <button @click.stop="deleteCheck(check.id)"
-                            class="text-[10px] bg-terminal-red/20 hover:bg-terminal-red/30 text-terminal-red px-3 py-1.5 rounded uppercase tracking-wide">delete</button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </template>
-              </div>
-            </div>
-          </div>
-        </template>
-      </div>
-
-      <div x-show="hasLoaded && groupedChecks.length === 0"
-        class="text-center py-20 border border-dashed border-terminal-border rounded-lg">
-        <div class="text-terminal-muted mb-2 text-4xl">_</div>
-        <div class="text-terminal-muted mb-4 text-sm">no monitors configured</div>
-        <button @click="openAddModal()" class="text-terminal-green hover:underline text-sm">+ create first
-          monitor</button>
-      </div>
-    </main>
-
-    <!-- Add/Edit Monitor Modal -->
-    <div x-show="showAddModal" x-cloak class="fixed inset-0 bg-terminal-bg z-50 overflow-y-auto"
-      x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0"
-      x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-150"
-      x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0">
-      <div class="min-h-screen">
-        <div class="bg-terminal-surface border-b border-terminal-border sticky top-0 z-10">
-          <div class="container mx-auto px-6 py-4 flex justify-between items-center">
-            <h2 class="text-lg font-bold text-terminal-green"
-              x-text="editingCheck ? '$ edit monitor' : '$ new monitor'"></h2>
-            <button @click="closeModals()"
-              class="text-terminal-muted hover:text-terminal-text text-2xl">&times;</button>
-          </div>
-        </div>
-
-        <div class="container mx-auto px-6 py-8 max-w-4xl">
-          <form @submit.prevent="saveCheck()">
-            <div class="mb-10">
-              <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-4">Monitor Type</label>
-              <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
-                <button type="button" @click="formData.type = 'http'"
-                  class="p-4 rounded-lg border-2 transition text-left"
-                  :class="formData.type === 'http' ? 'border-terminal-blue bg-terminal-blue/10' : 'border-terminal-border hover:border-terminal-muted'">
-                  <div class="text-terminal-blue font-bold mb-1">HTTP(S)</div>
-                  <div class="text-[10px] text-terminal-muted">Web endpoints</div>
-                </button>
-                <button type="button" @click="formData.type = 'ping'"
-                  class="p-4 rounded-lg border-2 transition text-left"
-                  :class="formData.type === 'ping' ? 'border-terminal-cyan bg-terminal-cyan/10' : 'border-terminal-border hover:border-terminal-muted'">
-                  <div class="text-terminal-cyan font-bold mb-1">Ping</div>
-                  <div class="text-[10px] text-terminal-muted">ICMP ping</div>
-                </button>
-                <button type="button" @click="formData.type = 'postgres'"
-                  class="p-4 rounded-lg border-2 transition text-left"
-                  :class="formData.type === 'postgres' ? 'border-terminal-purple bg-terminal-purple/10' : 'border-terminal-border hover:border-terminal-muted'">
-                  <div class="text-terminal-purple font-bold mb-1">PostgreSQL</div>
-                  <div class="text-[10px] text-terminal-muted">Database</div>
-                </button>
-                <button type="button" @click="formData.type = 'json_http'"
-                  class="p-4 rounded-lg border-2 transition text-left"
-                  :class="formData.type === 'json_http' ? 'border-terminal-yellow bg-terminal-yellow/10' : 'border-terminal-border hover:border-terminal-muted'">
-                  <div class="text-terminal-yellow font-bold mb-1">JSON API</div>
-                  <div class="text-[10px] text-terminal-muted">JSON assertion</div>
-                </button>
-                <button type="button" @click="formData.type = 'dns'"
-                  class="p-4 rounded-lg border-2 transition text-left"
-                  :class="formData.type === 'dns' ? 'border-terminal-green bg-terminal-green/10' : 'border-terminal-border hover:border-terminal-muted'">
-                  <div class="text-terminal-green font-bold mb-1">DNS</div>
-                  <div class="text-[10px] text-terminal-muted">DNS resolver</div>
-                </button>
-                <button type="button" @click="formData.type = 'tailscale'"
-                  class="p-4 rounded-lg border-2 transition text-left"
-                  :class="formData.type === 'tailscale' ? 'border-terminal-cyan bg-terminal-cyan/10' : 'border-terminal-border hover:border-terminal-muted'">
-                  <div class="text-terminal-cyan font-bold mb-1">Tailscale</div>
-                  <div class="text-[10px] text-terminal-muted">Device status</div>
-                </button>
-                <button type="button" @click="formData.type = 'tailscale_service'"
-                  class="p-4 rounded-lg border-2 transition text-left"
-                  :class="formData.type === 'tailscale_service' ? 'border-terminal-purple bg-terminal-purple/10' : 'border-terminal-border hover:border-terminal-muted'">
-                  <div class="text-terminal-purple font-bold mb-1">TS Service</div>
-                  <div class="text-[10px] text-terminal-muted">Tailnet service</div>
-                </button>
-              </div>
-            </div>
-
-            <div class="grid md:grid-cols-2 gap-6 mb-8">
+          <form @submit.prevent="handleSetup">
+            <div class="space-y-4">
               <div>
-                <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Display Name</label>
-                <input type="text" x-model="formData.name" required
-                  class="w-full bg-terminal-surface border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
-                  placeholder="My Server">
-              </div>
-              <div class="grid grid-cols-4 gap-4">
-                <div>
-                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Interval
-                    (s)</label>
-                  <input type="number" x-model="formData.interval_seconds" min="10" required
-                    class="w-full bg-terminal-surface border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono">
-                </div>
-                <div>
-                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Timeout
-                    (s)</label>
-                  <input type="number" x-model="formData.timeout_seconds" min="1" required
-                    class="w-full bg-terminal-surface border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono">
-                </div>
-                <div>
-                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Retries</label>
-                  <input type="number" x-model="formData.retries" min="0" max="10"
-                    class="w-full bg-terminal-surface border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono">
-                  <div class="text-[10px] text-terminal-muted mt-1">0-10</div>
-                </div>
-                <div>
-                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Retry Delay
-                    (s)</label>
-                  <input type="number" x-model="formData.retry_delay_seconds" min="1" max="60"
-                    class="w-full bg-terminal-surface border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono">
-                </div>
-              </div>
-            </div>
-
-            <!-- Group & Tags -->
-            <div class="grid md:grid-cols-2 gap-6 mb-8">
-              <div>
-                <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Group</label>
-                <select x-model="formData.group_id"
-                  class="w-full bg-terminal-surface border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono">
-                  <option value="">No Group</option>
-                  <template x-for="g in groups" :key="g.id">
-                    <option :value="g.id" x-text="g.name"></option>
-                  </template>
-                </select>
+                <label class="block text-sm font-medium text-terminal-text mb-2">Username</label>
+                <input type="text" x-model="setupForm.username" required
+                  class="w-full bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-terminal-text focus:outline-none focus:border-terminal-green"
+                  placeholder="admin">
               </div>
               <div>
-                <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Tags</label>
-                <div
-                  class="flex flex-wrap gap-2 p-3 bg-terminal-surface border border-terminal-border rounded min-h-[50px]">
-                  <template x-for="tag in tags" :key="tag.id">
-                    <button type="button" @click="toggleTag(tag.id)" class="text-[10px] px-2 py-1 rounded transition"
-                      :class="formData.tag_ids.includes(tag.id) ? '' : 'opacity-40 hover:opacity-70'"
-                      :style="`background: ${tag.color}30; color: ${tag.color}; border: 1px solid ${formData.tag_ids.includes(tag.id) ? tag.color : 'transparent'}`"
-                      x-text="tag.name"></button>
-                  </template>
-                  <span x-show="tags.length === 0" class="text-terminal-muted text-xs">No tags created</span>
-                </div>
+                <label class="block text-sm font-medium text-terminal-text mb-2">Password</label>
+                <input type="password" x-model="setupForm.password" required minlength="6"
+                  class="w-full bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-terminal-text focus:outline-none focus:border-terminal-green"
+                  placeholder="••••••••">
+                <p class="text-terminal-muted text-xs mt-1">Minimum 6 characters</p>
               </div>
+              <div x-show="setupError" class="text-terminal-red text-sm" x-text="setupError"></div>
             </div>
-
-            <!-- HTTP / JSON HTTP Fields -->
-            <div x-show="formData.type === 'http' || formData.type === 'json_http'"
-              class="space-y-6 mb-8 p-6 bg-terminal-surface border border-terminal-border rounded-lg">
-              <div class="text-xs text-terminal-muted uppercase tracking-widest mb-4">HTTP Configuration</div>
-              <div class="grid md:grid-cols-4 gap-4">
-                <div class="md:col-span-3">
-                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">URL</label>
-                  <input type="url" x-model="formData.url"
-                    :required="formData.type === 'http' || formData.type === 'json_http'"
-                    class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
-                    placeholder="https://api.example.com/health">
-                </div>
-                <div>
-                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Method</label>
-                  <select x-model="formData.method"
-                    class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono">
-                    <option value="GET">GET</option>
-                    <option value="POST">POST</option>
-                    <option value="PUT">PUT</option>
-                    <option value="HEAD">HEAD</option>
-                  </select>
-                </div>
-              </div>
-              <div x-show="formData.type === 'http'">
-                <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Expected Status
-                  Codes</label>
-                <input type="text" x-model="expectedStatusCodesInput" @input="updateStatusCodesArray()"
-                  class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
-                  placeholder="200, 201, 204">
-                <div class="text-[10px] text-terminal-muted mt-1">Comma-separated list</div>
-              </div>
-              <div x-show="formData.type === 'json_http'" class="space-y-4 pt-4 border-t border-terminal-border">
-                <div class="text-xs text-terminal-yellow uppercase tracking-widest">JSON Assertion</div>
-                <div class="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">JSON
-                      Path</label>
-                    <input type="text" x-model="formData.json_path"
-                      class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
-                      placeholder="data.status">
-                  </div>
-                  <div>
-                    <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Expected
-                      Value</label>
-                    <input type="text" x-model="formData.expected_json_value"
-                      class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
-                      placeholder="ok">
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Ping Fields -->
-            <div x-show="formData.type === 'ping'"
-              class="space-y-6 mb-8 p-6 bg-terminal-surface border border-terminal-border rounded-lg">
-              <div class="text-xs text-terminal-cyan uppercase tracking-widest mb-4">Ping Configuration</div>
-              <div>
-                <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Host / IP
-                  Address</label>
-                <input type="text" x-model="formData.host" :required="formData.type === 'ping'"
-                  class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
-                  placeholder="8.8.8.8 or google.com">
-              </div>
-            </div>
-
-            <!-- DNS Fields -->
-            <div x-show="formData.type === 'dns'"
-              class="space-y-6 mb-8 p-6 bg-terminal-surface border border-terminal-border rounded-lg">
-              <div class="text-xs text-terminal-green uppercase tracking-widest mb-4">DNS Configuration</div>
-              <div class="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Hostname</label>
-                  <input type="text" x-model="formData.dns_hostname" :required="formData.type === 'dns'"
-                    class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
-                    placeholder="example.com">
-                </div>
-                <div>
-                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Record
-                    Type</label>
-                  <select x-model="formData.dns_record_type"
-                    class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono">
-                    <option value="A">A (IPv4)</option>
-                    <option value="AAAA">AAAA (IPv6)</option>
-                    <option value="CNAME">CNAME</option>
-                    <option value="MX">MX</option>
-                    <option value="TXT">TXT</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Expected Value
-                  (Optional)</label>
-                <input type="text" x-model="formData.expected_dns_value"
-                  class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
-                  placeholder="1.2.3.4">
-              </div>
-            </div>
-
-            <!-- PostgreSQL Fields -->
-            <div x-show="formData.type === 'postgres'"
-              class="space-y-6 mb-8 p-6 bg-terminal-surface border border-terminal-border rounded-lg">
-              <div class="text-xs text-terminal-purple uppercase tracking-widest mb-4">PostgreSQL Configuration</div>
-              <div>
-                <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Connection
-                  String</label>
-                <input type="text" x-model="formData.postgres_conn_string" :required="formData.type === 'postgres'"
-                  class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
-                  placeholder="postgres://user:pass@localhost:5432/dbname">
-              </div>
-              <div class="pt-4 border-t border-terminal-border">
-                <div class="text-xs text-terminal-purple uppercase tracking-widest mb-4">Query Assertion (Optional)
-                </div>
-                <div class="space-y-4">
-                  <div>
-                    <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">SQL
-                      Query</label>
-                    <textarea x-model="formData.postgres_query" rows="2"
-                      class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
-                      placeholder="SELECT 1"></textarea>
-                  </div>
-                  <div>
-                    <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Expected
-                      Value</label>
-                    <input type="text" x-model="formData.expected_query_value"
-                      class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
-                      placeholder="1">
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Tailscale Fields -->
-            <div x-show="formData.type === 'tailscale'"
-              x-init="$watch('formData.type', val => val === 'tailscale' && loadTailscaleDevices())"
-              class="space-y-6 mb-8 p-6 bg-terminal-surface border border-terminal-border rounded-lg">
-              <div class="text-xs text-terminal-cyan uppercase tracking-widest mb-4">Tailscale Configuration</div>
-              <div>
-                <div class="flex items-center justify-between mb-2">
-                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest">Device</label>
-                  <button type="button" @click="loadTailscaleDevices()" :disabled="loadingTailscaleDevices"
-                    class="text-[10px] text-terminal-cyan hover:text-terminal-green disabled:opacity-50 flex items-center gap-1">
-                    <template x-if="loadingTailscaleDevices"><svg class="animate-spin w-3 h-3" fill="none"
-                        viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
-                        </circle>
-                        <path class="opacity-75" fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                        </path>
-                      </svg></template>
-                    <span x-text="loadingTailscaleDevices ? 'Loading...' : '↻ Refresh'"></span>
-                  </button>
-                </div>
-                <template x-if="tailscaleDevices.length > 0">
-                  <select x-model="formData.tailscale_device_id" :required="formData.type === 'tailscale'"
-                    class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono">
-                    <option value="">Select a device...</option>
-                    <template x-for="device in tailscaleDevices" :key="device.id">
-                      <option :value="device.id"
-                        x-text="`${device.hostname || device.name} (${device.addresses[0] || 'no IP'}) - ${device.online ? '🟢 Online' : '🔴 Offline'}`">
-                      </option>
-                    </template>
-                  </select>
-                </template>
-                <template x-if="tailscaleDevices.length === 0 && !loadingTailscaleDevices">
-                  <div>
-                    <input type="text" x-model="formData.tailscale_device_id" :required="formData.type === 'tailscale'"
-                      class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
-                      placeholder="Device ID (configure Tailscale in Settings first)">
-                  </div>
-                </template>
-                <div x-show="formData.tailscale_device_id && tailscaleDevices.length > 0"
-                  class="text-[10px] text-terminal-muted mt-2">
-                  ID: <span class="text-terminal-cyan" x-text="formData.tailscale_device_id"></span>
-                </div>
-              </div>
-              <div x-show="!settings.tailscale_api_key || !settings.tailscale_tailnet"
-                class="p-3 bg-terminal-yellow/10 border border-terminal-yellow/30 rounded text-[10px] text-terminal-yellow">
-                Configure Tailscale API credentials in Settings before using this check type
-              </div>
-            </div>
-
-            <!-- Tailscale Service Fields -->
-            <div x-show="formData.type === 'tailscale_service'"
-              x-init="$watch('formData.type', val => val === 'tailscale_service' && loadTailscaleDevices())"
-              class="space-y-6 mb-8 p-6 bg-terminal-surface border border-terminal-border rounded-lg">
-              <div class="text-xs text-terminal-purple uppercase tracking-widest mb-4">Tailscale Service Configuration
-              </div>
-              <div>
-                <div class="flex items-center justify-between mb-2">
-                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest">Device /
-                    Hostname</label>
-                  <button type="button" @click="loadTailscaleDevices()" :disabled="loadingTailscaleDevices"
-                    class="text-[10px] text-terminal-cyan hover:text-terminal-green disabled:opacity-50 flex items-center gap-1">
-                    <template x-if="loadingTailscaleDevices"><svg class="animate-spin w-3 h-3" fill="none"
-                        viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
-                        </circle>
-                        <path class="opacity-75" fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                        </path>
-                      </svg></template>
-                    <span x-text="loadingTailscaleDevices ? 'Loading...' : '↻ Refresh'"></span>
-                  </button>
-                </div>
-                <template x-if="tailscaleDevices.length > 0">
-                  <select x-model="formData.tailscale_service_host" :required="formData.type === 'tailscale_service'"
-                    class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono">
-                    <option value="">Select a device...</option>
-                    <template x-for="device in tailscaleDevices" :key="device.id">
-                      <option :value="device.hostname"
-                        x-text="`${device.hostname || device.name} (${device.addresses[0] || 'no IP'}) - ${device.online ? '🟢 Online' : '🔴 Offline'}`">
-                      </option>
-                    </template>
-                  </select>
-                </template>
-                <template x-if="tailscaleDevices.length === 0 && !loadingTailscaleDevices">
-                  <div>
-                    <input type="text" x-model="formData.tailscale_service_host"
-                      :required="formData.type === 'tailscale_service'"
-                      class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
-                      placeholder="Device hostname (configure Tailscale in Settings first)">
-                  </div>
-                </template>
-              </div>
-              <div class="grid md:grid-cols-3 gap-4">
-                <div>
-                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Protocol</label>
-                  <select x-model="formData.tailscale_service_protocol"
-                    class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono">
-                    <option value="http">HTTP</option>
-                    <option value="https">HTTPS</option>
-                    <option value="tcp">TCP</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Port</label>
-                  <input type="number" x-model="formData.tailscale_service_port"
-                    :required="formData.type === 'tailscale_service'" min="1" max="65535"
-                    class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
-                    placeholder="80">
-                </div>
-                <div
-                  x-show="formData.tailscale_service_protocol === 'http' || formData.tailscale_service_protocol === 'https'">
-                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Path</label>
-                  <input type="text" x-model="formData.tailscale_service_path"
-                    class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
-                    placeholder="/">
-                </div>
-              </div>
-              <div
-                x-show="formData.tailscale_service_protocol === 'http' || formData.tailscale_service_protocol === 'https'">
-                <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Expected Status
-                  Codes</label>
-                <input type="text" x-model="expectedStatusCodesInput" @input="updateStatusCodesArray()"
-                  class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
-                  placeholder="200, 201, 204">
-                <div class="text-[10px] text-terminal-muted mt-1">Comma-separated list (default: 200)</div>
-              </div>
-              <div x-show="!settings.tailscale_api_key || !settings.tailscale_tailnet"
-                class="p-3 bg-terminal-yellow/10 border border-terminal-yellow/30 rounded text-[10px] text-terminal-yellow">
-                Configure Tailscale API credentials in Settings before using this check type
-              </div>
-            </div>
-
-            <div class="flex items-center gap-3 p-4 bg-terminal-surface border border-terminal-border rounded-lg mb-8">
-              <input type="checkbox" x-model="formData.enabled" id="enabled"
-                class="w-4 h-4 rounded bg-terminal-bg border-terminal-border text-terminal-green focus:ring-terminal-green">
-              <label for="enabled" class="text-sm">Active Monitoring</label>
-            </div>
-
-            <div class="flex gap-4">
-              <button type="submit"
-                class="flex-1 bg-terminal-green text-terminal-bg px-6 py-4 rounded font-bold hover:opacity-90 transition text-sm uppercase tracking-wide">Save
-                Monitor</button>
-              <button type="button" @click="closeModals()"
-                class="px-6 py-4 bg-terminal-surface border border-terminal-border text-terminal-muted hover:text-terminal-text rounded transition text-sm uppercase tracking-wide">Cancel</button>
-            </div>
+            <button type="submit" :disabled="setupLoading"
+              class="w-full mt-6 bg-terminal-green text-terminal-bg font-semibold py-2 px-4 rounded hover:opacity-90 transition disabled:opacity-50">
+              <span x-show="!setupLoading">Create Account</span>
+              <span x-show="setupLoading">Creating...</span>
+            </button>
           </form>
         </div>
       </div>
     </div>
 
-    <!-- Group Modal -->
-    <div x-show="showGroupModal" x-cloak
-      class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50" x-transition.opacity
-      @click.self="showGroupModal = false">
-      <div class="bg-terminal-surface border border-terminal-border rounded-lg shadow-2xl p-8 w-full max-w-lg"
-        @click.stop>
-        <h3 class="text-lg font-bold text-terminal-green mb-6" x-text="editingGroup ? '$ edit group' : '$ new group'">
-        </h3>
-        <form @submit.prevent="saveGroup()">
-          <div class="space-y-4 mb-6">
-            <div>
-              <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Group Name</label>
-              <input type="text" x-model="groupForm.name" required
-                class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
-                placeholder="Infrastructure">
-            </div>
-            <div>
-              <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Sort Order</label>
-              <input type="number" x-model="groupForm.sort_order"
-                class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
-                placeholder="0">
-            </div>
+    <!-- Login Screen -->
+    <div x-show="authChecked && !needsSetup && !isAuthenticated"
+      class="flex items-center justify-center min-h-screen px-4">
+      <div class="w-full max-w-md">
+        <div class="bg-terminal-surface border border-terminal-border rounded-lg p-8">
+          <div class="text-center mb-8">
+            <h1 class="text-2xl font-bold text-terminal-text mb-2">Check Monitor</h1>
+            <p class="text-terminal-muted text-sm">Sign in to continue</p>
           </div>
-          <div class="flex gap-4">
-            <button type="submit"
-              class="flex-1 bg-terminal-green text-terminal-bg px-4 py-3 rounded font-bold hover:opacity-90 transition text-sm uppercase tracking-wide">Save</button>
-            <button type="button" x-show="editingGroup" @click="deleteGroup(editingGroup.id)"
-              class="px-4 py-3 bg-terminal-red/20 text-terminal-red rounded transition text-sm uppercase tracking-wide">Delete</button>
-            <button type="button" @click="showGroupModal = false; editingGroup = null"
-              class="px-4 py-3 bg-terminal-border text-terminal-muted hover:text-terminal-text rounded transition text-sm uppercase tracking-wide">Cancel</button>
+
+          <form @submit.prevent="handleLogin">
+            <div class="space-y-4">
+              <div>
+                <label class="block text-sm font-medium text-terminal-text mb-2">Username</label>
+                <input type="text" x-model="loginForm.username" required
+                  class="w-full bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-terminal-text focus:outline-none focus:border-terminal-green"
+                  placeholder="Enter username">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-terminal-text mb-2">Password</label>
+                <input type="password" x-model="loginForm.password" required
+                  class="w-full bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-terminal-text focus:outline-none focus:border-terminal-green"
+                  placeholder="Enter password">
+              </div>
+              <div x-show="loginError" class="text-terminal-red text-sm" x-text="loginError"></div>
+            </div>
+            <button type="submit" :disabled="loginLoading"
+              class="w-full mt-6 bg-terminal-green text-terminal-bg font-semibold py-2 px-4 rounded hover:opacity-90 transition disabled:opacity-50">
+              <span x-show="!loginLoading">Sign In</span>
+              <span x-show="loginLoading">Signing in...</span>
+            </button>
+          </form>
+
+          <!-- Passkey Login Option -->
+          <div class="mt-6 pt-6 border-t border-terminal-border">
+            <button @click="handlePasskeyLogin" :disabled="passkeyLoading"
+              class="w-full bg-terminal-border text-terminal-text font-semibold py-2 px-4 rounded hover:bg-terminal-muted transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z">
+                </path>
+              </svg>
+              <span x-show="!passkeyLoading">Sign in with Passkey</span>
+              <span x-show="passkeyLoading">Authenticating...</span>
+            </button>
+            <p class="text-center text-terminal-muted text-xs mt-2">Use Touch ID, Face ID, Windows Hello, or security
+              key</p>
           </div>
-        </form>
+        </div>
       </div>
     </div>
 
-    <!-- Tag Modal -->
-    <div x-show="showTagModal" x-cloak
-      class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50" x-transition.opacity
-      @click.self="showTagModal = false">
-      <div class="bg-terminal-surface border border-terminal-border rounded-lg shadow-2xl p-8 w-full max-w-lg"
-        @click.stop>
-        <h3 class="text-lg font-bold text-terminal-green mb-6" x-text="editingTag ? '$ edit tag' : '$ new tag'"></h3>
-        <form @submit.prevent="saveTag()">
-          <div class="space-y-4 mb-6">
-            <div>
-              <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Tag Name</label>
-              <input type="text" x-model="tagForm.name" required
-                class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
-                placeholder="production">
+    <!-- Main App (Authenticated) -->
+    <div x-show="authChecked && isAuthenticated">
+      <header class="bg-terminal-surface border-b border-terminal-border sticky top-0 z-40">
+        <div class="container mx-auto px-6 py-4 flex justify-between items-center">
+          <div class="flex items-center gap-3">
+            <!-- <div class="w-3 h-3 rounded-full bg-terminal-green" :class="isLive ? 'pulse-dot' : ''"></div> -->
+            <span class="text-terminal-muted text-xs">v1.0</span>
+          </div>
+          <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2 text-xs">
+              <span class="text-terminal-muted">synced</span>
+              <span class="text-terminal-green font-mono" x-text="lastUpdated.toLocaleTimeString()"></span>
+              <span class="w-2 h-2 rounded-full"
+                :class="isLive ? 'bg-terminal-green pulse-dot' : 'bg-terminal-muted'"></span>
             </div>
-            <div>
-              <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Color</label>
-              <div class="flex gap-2 flex-wrap">
-                <template x-for="color in tagColors" :key="color">
-                  <button type="button" @click="tagForm.color = color" class="w-8 h-8 rounded border-2 transition"
-                    :class="tagForm.color === color ? 'border-white' : 'border-transparent'"
-                    :style="`background: ${color}`"></button>
+            <button @click="showSettingsModal = true"
+              class="text-terminal-muted hover:text-terminal-text transition p-2 rounded hover:bg-terminal-border"
+              title="Settings">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z">
+                </path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+              </svg>
+            </button>
+            <button @click="handleLogout"
+              class="text-terminal-muted hover:text-terminal-text transition p-2 rounded hover:bg-terminal-border"
+              title="Logout">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1">
+                </path>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main class="container mx-auto px-6 py-8">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10" x-show="!hasLoaded" x-cloak>
+          <div class="col-span-full flex flex-wrap items-center gap-2 text-xs mb-2 opacity-70">
+            <div class="h-6 w-32 rounded skeleton"></div>
+            <div class="h-7 w-14 rounded skeleton"></div>
+            <div class="h-7 w-14 rounded skeleton"></div>
+            <div class="h-7 w-14 rounded skeleton"></div>
+            <div class="h-7 w-14 rounded skeleton"></div>
+            <div class="h-7 w-14 rounded skeleton"></div>
+          </div>
+          <template x-for="i in 4" :key="i">
+            <div class="bg-terminal-surface border border-terminal-border rounded-lg p-4">
+              <div class="h-3 w-16 rounded skeleton mb-3"></div>
+              <div class="h-7 w-24 rounded skeleton"></div>
+            </div>
+          </template>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10" x-show="stats && hasLoaded" x-cloak>
+          <div class="col-span-full flex flex-wrap items-center gap-2 text-xs mb-2">
+            <span class="text-terminal-muted uppercase tracking-widest">Time Range</span>
+            <template x-for="range in ranges" :key="range">
+              <button type="button" @click="setTimeRange(range)"
+                class="px-3 py-1 rounded border text-[10px] uppercase tracking-wide"
+                :class="timeRange === range ? 'border-terminal-green text-terminal-green' : 'border-terminal-border text-terminal-muted hover:text-terminal-text'"
+                x-text="range"></button>
+            </template>
+          </div>
+          <div
+            class="bg-terminal-surface border border-terminal-border rounded-lg p-4 hover:border-terminal-muted transition">
+            <div class="text-[10px] text-terminal-muted uppercase tracking-widest mb-1">total</div>
+            <div class="text-2xl font-bold" x-text="stats.total_checks"></div>
+          </div>
+          <div
+            class="bg-terminal-surface border border-terminal-border rounded-lg p-4 hover:border-terminal-muted transition">
+            <div class="text-[10px] text-terminal-muted uppercase tracking-widest mb-1">active</div>
+            <div class="text-2xl font-bold text-terminal-purple" x-text="stats.active_checks"></div>
+          </div>
+          <div
+            class="bg-terminal-surface border border-terminal-border rounded-lg p-4 hover:border-terminal-muted transition">
+            <div class="text-[10px] text-terminal-muted uppercase tracking-widest mb-1">up</div>
+            <div class="text-2xl font-bold text-terminal-green" x-text="stats.up_checks"></div>
+          </div>
+          <div
+            class="bg-terminal-surface border border-terminal-border rounded-lg p-4 hover:border-terminal-muted transition">
+            <div class="text-[10px] text-terminal-muted uppercase tracking-widest mb-1">uptime</div>
+            <div class="text-2xl font-bold"
+              :class="stats.total_uptime >= 99 ? 'text-terminal-green' : (stats.total_uptime >= 95 ? 'text-terminal-yellow' : 'text-terminal-red')"
+              x-text="stats.total_uptime.toFixed(2) + '%'"></div>
+          </div>
+        </div>
+
+        <div class="flex justify-between items-center mb-6 flex-wrap gap-4">
+          <div class="flex items-center gap-2 text-sm text-terminal-muted">
+            <span class="text-terminal-green">$</span> monitors
+          </div>
+          <div class="flex gap-2">
+            <button @click="showGroupModal = true"
+              class="bg-terminal-border text-terminal-text px-4 py-2 rounded text-sm font-bold hover:bg-terminal-muted transition flex items-center gap-2">
+              <span>+</span> group
+            </button>
+            <button @click="showTagModal = true"
+              class="bg-terminal-border text-terminal-text px-4 py-2 rounded text-sm font-bold hover:bg-terminal-muted transition flex items-center gap-2">
+              <span>+</span> tag
+            </button>
+            <button @click="openAddModal()"
+              class="bg-terminal-green text-terminal-bg px-4 py-2 rounded text-sm font-bold hover:opacity-90 transition flex items-center gap-2">
+              <span>+</span> monitor
+            </button>
+          </div>
+        </div>
+
+        <!-- Grouped Monitors -->
+        <div class="space-y-6" x-show="!hasLoaded" x-cloak>
+          <template x-for="i in 3" :key="i">
+            <div class="bg-terminal-surface border border-terminal-border rounded-lg overflow-hidden">
+              <div class="flex items-center gap-4 p-4 border-b border-terminal-border">
+                <div class="w-1 h-8 rounded skeleton"></div>
+                <div class="w-2.5 h-2.5 rounded-full skeleton"></div>
+                <div class="flex-grow">
+                  <div class="flex items-center gap-3">
+                    <div class="h-4 w-32 rounded skeleton"></div>
+                    <div class="h-4 w-20 rounded skeleton"></div>
+                  </div>
+                </div>
+                <div class="h-5 w-5 rounded skeleton"></div>
+              </div>
+              <div class="divide-y divide-terminal-border">
+                <template x-for="j in 2" :key="j">
+                  <div class="p-4">
+                    <div class="flex items-center gap-4">
+                      <div class="w-2.5 h-2.5 rounded-full skeleton"></div>
+                      <div class="flex-grow">
+                        <div class="h-4 w-40 rounded skeleton mb-2"></div>
+                        <div class="h-3 w-64 rounded skeleton"></div>
+                      </div>
+                      <div class="hidden sm:block h-4 w-12 rounded skeleton"></div>
+                      <div class="hidden sm:block h-4 w-16 rounded skeleton"></div>
+                    </div>
+                  </div>
                 </template>
               </div>
             </div>
+          </template>
+        </div>
+
+        <div class="space-y-6" x-show="hasLoaded">
+          <template x-for="group in groupedChecks" :key="group.id">
+            <div class="bg-terminal-surface border border-terminal-border rounded-lg overflow-hidden">
+              <!-- Group Header -->
+              <div
+                class="flex items-center gap-4 p-4 cursor-pointer border-b border-terminal-border hover:bg-terminal-border/30 transition"
+                @click="toggleGroupExpand(group.id)">
+                <div class="w-1 h-8 rounded" :class="group.is_up ? 'bg-terminal-green' : 'bg-terminal-red'"></div>
+                <div class="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                  :class="group.is_up ? 'bg-terminal-green' : 'bg-terminal-red glow-red'"></div>
+                <div class="flex-grow">
+                  <div class="flex items-center gap-3">
+                    <span class="font-bold text-terminal-text" x-text="group.name"></span>
+                    <span class="text-[10px] px-2 py-0.5 rounded bg-terminal-border text-terminal-muted"
+                      x-text="group.checks.length + ' monitors'"></span>
+                    <span x-show="!group.is_up"
+                      class="text-[10px] px-2 py-0.5 rounded bg-terminal-red/20 text-terminal-red"
+                      x-text="group.down_count + ' down'"></span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-4 flex-shrink-0">
+                  <button @click.stop="editGroup(group)" x-show="group.id !== 0"
+                    class="text-terminal-muted hover:text-terminal-text p-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z">
+                      </path>
+                    </svg>
+                  </button>
+                  <svg class="w-5 h-5 text-terminal-muted transition-transform"
+                    :class="expandedGroups.includes(group.id) ? '' : '-rotate-90'" fill="none" stroke="currentColor"
+                    viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                  </svg>
+                </div>
+              </div>
+
+              <!-- Group Checks -->
+              <div x-show="expandedGroups.includes(group.id)" x-collapse>
+                <div class="divide-y divide-terminal-border">
+                  <template x-for="check in group.checks" :key="check.id">
+                    <div class="group hover:bg-terminal-border/20 transition">
+                      <div class="flex items-center gap-4 p-4 cursor-pointer" @click="toggleExpand(check.id)"
+                        :class="!check.enabled && 'opacity-60'">
+                        <div class="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                          :class="!check.enabled ? 'bg-terminal-yellow' : (check.is_up ? 'bg-terminal-green glow-green' : 'bg-terminal-red glow-red')">
+                        </div>
+                        <div class="flex-grow min-w-0">
+                          <div class="flex items-center gap-2 flex-wrap">
+                            <span class="font-bold text-terminal-text truncate" x-text="check.name"></span>
+                            <span x-show="!check.enabled"
+                              class="text-[10px] px-2 py-0.5 rounded uppercase font-bold flex-shrink-0 bg-terminal-yellow/20 text-terminal-yellow">paused</span>
+                            <span class="text-[10px] px-2 py-0.5 rounded uppercase font-bold flex-shrink-0"
+                              :class="getCheckTypeClass(check.type)" x-text="check.type"></span>
+                            <template x-for="tag in (check.tags || [])" :key="tag.id">
+                              <span class="text-[10px] px-2 py-0.5 rounded flex-shrink-0"
+                                :style="`background: ${tag.color}20; color: ${tag.color}`" x-text="tag.name"></span>
+                            </template>
+                          </div>
+                          <div class="text-xs text-terminal-muted truncate" x-text="getCheckTarget(check)"></div>
+                        </div>
+                        <div class="flex items-center gap-6 flex-shrink-0">
+                          <div class="text-right hidden sm:block">
+                            <div class="text-xs text-terminal-muted">latency</div>
+                            <div class="font-bold"
+                              :class="(check.last_status?.response_time_ms || 0) > 1000 ? 'text-terminal-yellow' : 'text-terminal-text'"
+                              x-text="(check.last_status?.response_time_ms || 0) + 'ms'"></div>
+                          </div>
+                          <div class="text-right hidden sm:block">
+                            <div class="text-xs text-terminal-muted">checked</div>
+                            <div x-text="timeAgo(check.last_checked_at)"></div>
+                          </div>
+                          <svg class="w-5 h-5 text-terminal-muted transition-transform"
+                            :class="expandedChecks.includes(check.id) ? 'rotate-180' : ''" fill="none"
+                            stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7">
+                            </path>
+                          </svg>
+                        </div>
+                      </div>
+
+                      <div x-show="expandedChecks.includes(check.id)" x-collapse
+                        class="border-t border-terminal-border bg-terminal-bg/50">
+                        <div class="p-5">
+                          <div class="h-24 w-full mb-4 relative" :data-check-id="check.id"
+                            x-effect="if(expandedChecks.includes(check.id) && check.history) { renderChart($el, check.history, check.is_up); }"
+                            x-init="$watch('timeRange', () => { if(expandedChecks.includes(check.id)) { setTimeout(() => { const updatedCheck = groupedChecks.flatMap(g => g.checks || []).find(c => c.id === check.id); if(updatedCheck && updatedCheck.history) renderChart($el, updatedCheck.history, updatedCheck.is_up); }, 200); } });">
+                            <canvas class="w-full h-full"></canvas>
+                          </div>
+                          <div class="flex justify-between items-center text-xs mb-3">
+                            <span class="text-terminal-muted">response time history</span>
+                            <span class="text-terminal-muted">interval: <span class="text-terminal-text"
+                                x-text="check.interval_seconds + 's'"></span></span>
+                          </div>
+                          <div
+                            class="flex gap-[2px] h-5 w-full rounded bg-terminal-border/50 mb-4 overflow-visible relative">
+                            <template x-for="(status, index) in getStatusBar(check.history, check)" :key="index">
+                              <div
+                                class="flex-1 h-full transition-all hover:opacity-70 cursor-pointer relative group/bar"
+                                :class="status.success ? 'bg-terminal-green' : (status.empty ? 'bg-terminal-border' : 'bg-terminal-red')">
+                                <div
+                                  class="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-terminal-bg border border-terminal-border text-[10px] px-2 py-1 rounded opacity-0 group-hover/bar:opacity-100 pointer-events-none whitespace-nowrap z-10">
+                                  <span x-text="status.empty ? 'N/A' : (status.success ? 'UP' : 'DOWN')"></span>
+                                  <span class="text-terminal-muted mx-1">|</span>
+                                  <span class="text-terminal-muted" x-text="status.time || ''"></span>
+                                </div>
+                              </div>
+                            </template>
+                          </div>
+                          <div class="flex gap-2">
+                            <button @click.stop="triggerCheckNow(check.id)"
+                              class="text-[10px] bg-terminal-green/20 hover:bg-terminal-green/30 text-terminal-green px-3 py-1.5 rounded uppercase tracking-wide"
+                              :disabled="!check.enabled">check now</button>
+                            <button @click.stop="toggleCheckEnabled(check)"
+                              class="text-[10px] px-3 py-1.5 rounded uppercase tracking-wide"
+                              :class="check.enabled ? 'bg-terminal-yellow/20 hover:bg-terminal-yellow/30 text-terminal-yellow' : 'bg-terminal-green/20 hover:bg-terminal-green/30 text-terminal-green'"
+                              x-text="check.enabled ? 'pause' : 'resume'"></button>
+                            <button @click.stop="openEditModal(check)"
+                              class="text-[10px] bg-terminal-border hover:bg-terminal-muted text-terminal-text px-3 py-1.5 rounded uppercase tracking-wide">edit</button>
+                            <button @click.stop="openHistoryModal(check)"
+                              class="text-[10px] bg-terminal-border hover:bg-terminal-muted text-terminal-text px-3 py-1.5 rounded uppercase tracking-wide">changes
+                              log</button>
+                            <button @click.stop="deleteCheck(check.id)"
+                              class="text-[10px] bg-terminal-red/20 hover:bg-terminal-red/30 text-terminal-red px-3 py-1.5 rounded uppercase tracking-wide">delete</button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <div x-show="hasLoaded && groupedChecks.length === 0"
+          class="text-center py-20 border border-dashed border-terminal-border rounded-lg">
+          <div class="text-terminal-muted mb-2 text-4xl">_</div>
+          <div class="text-terminal-muted mb-4 text-sm">no monitors configured</div>
+          <button @click="openAddModal()" class="text-terminal-green hover:underline text-sm">+ create first
+            monitor</button>
+        </div>
+      </main>
+
+      <!-- Add/Edit Monitor Modal -->
+      <div x-show="showAddModal" x-cloak class="fixed inset-0 bg-terminal-bg z-50 overflow-y-auto"
+        x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0"
+        x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-150"
+        x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0">
+        <div class="min-h-screen">
+          <div class="bg-terminal-surface border-b border-terminal-border sticky top-0 z-10">
+            <div class="container mx-auto px-6 py-4 flex justify-between items-center">
+              <h2 class="text-lg font-bold text-terminal-green"
+                x-text="editingCheck ? '$ edit monitor' : '$ new monitor'"></h2>
+              <button @click="closeModals()"
+                class="text-terminal-muted hover:text-terminal-text text-2xl">&times;</button>
+            </div>
           </div>
-          <div class="flex gap-4">
-            <button type="submit"
-              class="flex-1 bg-terminal-green text-terminal-bg px-4 py-3 rounded font-bold hover:opacity-90 transition text-sm uppercase tracking-wide">Save</button>
-            <button type="button" x-show="editingTag" @click="deleteTag(editingTag.id)"
-              class="px-4 py-3 bg-terminal-red/20 text-terminal-red rounded transition text-sm uppercase tracking-wide">Delete</button>
-            <button type="button" @click="showTagModal = false; editingTag = null"
+
+          <div class="container mx-auto px-6 py-8 max-w-4xl">
+            <form @submit.prevent="saveCheck()">
+              <div class="mb-10">
+                <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-4">Monitor Type</label>
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <button type="button" @click="formData.type = 'http'"
+                    class="p-4 rounded-lg border-2 transition text-left"
+                    :class="formData.type === 'http' ? 'border-terminal-blue bg-terminal-blue/10' : 'border-terminal-border hover:border-terminal-muted'">
+                    <div class="text-terminal-blue font-bold mb-1">HTTP(S)</div>
+                    <div class="text-[10px] text-terminal-muted">Web endpoints</div>
+                  </button>
+                  <button type="button" @click="formData.type = 'ping'"
+                    class="p-4 rounded-lg border-2 transition text-left"
+                    :class="formData.type === 'ping' ? 'border-terminal-cyan bg-terminal-cyan/10' : 'border-terminal-border hover:border-terminal-muted'">
+                    <div class="text-terminal-cyan font-bold mb-1">Ping</div>
+                    <div class="text-[10px] text-terminal-muted">ICMP ping</div>
+                  </button>
+                  <button type="button" @click="formData.type = 'postgres'"
+                    class="p-4 rounded-lg border-2 transition text-left"
+                    :class="formData.type === 'postgres' ? 'border-terminal-purple bg-terminal-purple/10' : 'border-terminal-border hover:border-terminal-muted'">
+                    <div class="text-terminal-purple font-bold mb-1">PostgreSQL</div>
+                    <div class="text-[10px] text-terminal-muted">Database</div>
+                  </button>
+                  <button type="button" @click="formData.type = 'json_http'"
+                    class="p-4 rounded-lg border-2 transition text-left"
+                    :class="formData.type === 'json_http' ? 'border-terminal-yellow bg-terminal-yellow/10' : 'border-terminal-border hover:border-terminal-muted'">
+                    <div class="text-terminal-yellow font-bold mb-1">JSON API</div>
+                    <div class="text-[10px] text-terminal-muted">JSON assertion</div>
+                  </button>
+                  <button type="button" @click="formData.type = 'dns'"
+                    class="p-4 rounded-lg border-2 transition text-left"
+                    :class="formData.type === 'dns' ? 'border-terminal-green bg-terminal-green/10' : 'border-terminal-border hover:border-terminal-muted'">
+                    <div class="text-terminal-green font-bold mb-1">DNS</div>
+                    <div class="text-[10px] text-terminal-muted">DNS resolver</div>
+                  </button>
+                  <button type="button" @click="formData.type = 'tailscale'"
+                    class="p-4 rounded-lg border-2 transition text-left"
+                    :class="formData.type === 'tailscale' ? 'border-terminal-cyan bg-terminal-cyan/10' : 'border-terminal-border hover:border-terminal-muted'">
+                    <div class="text-terminal-cyan font-bold mb-1">Tailscale</div>
+                    <div class="text-[10px] text-terminal-muted">Device status</div>
+                  </button>
+                  <button type="button" @click="formData.type = 'tailscale_service'"
+                    class="p-4 rounded-lg border-2 transition text-left"
+                    :class="formData.type === 'tailscale_service' ? 'border-terminal-purple bg-terminal-purple/10' : 'border-terminal-border hover:border-terminal-muted'">
+                    <div class="text-terminal-purple font-bold mb-1">TS Service</div>
+                    <div class="text-[10px] text-terminal-muted">Tailnet service</div>
+                  </button>
+                </div>
+              </div>
+
+              <div class="grid md:grid-cols-2 gap-6 mb-8">
+                <div>
+                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Display
+                    Name</label>
+                  <input type="text" x-model="formData.name" required
+                    class="w-full bg-terminal-surface border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
+                    placeholder="My Server">
+                </div>
+                <div class="grid grid-cols-4 gap-4">
+                  <div>
+                    <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Interval
+                      (s)</label>
+                    <input type="number" x-model="formData.interval_seconds" min="10" required
+                      class="w-full bg-terminal-surface border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Timeout
+                      (s)</label>
+                    <input type="number" x-model="formData.timeout_seconds" min="1" required
+                      class="w-full bg-terminal-surface border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Retries</label>
+                    <input type="number" x-model="formData.retries" min="0" max="10"
+                      class="w-full bg-terminal-surface border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono">
+                    <div class="text-[10px] text-terminal-muted mt-1">0-10</div>
+                  </div>
+                  <div>
+                    <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Retry Delay
+                      (s)</label>
+                    <input type="number" x-model="formData.retry_delay_seconds" min="1" max="60"
+                      class="w-full bg-terminal-surface border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Group & Tags -->
+              <div class="grid md:grid-cols-2 gap-6 mb-8">
+                <div>
+                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Group</label>
+                  <select x-model="formData.group_id"
+                    class="w-full bg-terminal-surface border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono">
+                    <option value="">No Group</option>
+                    <template x-for="g in groups" :key="g.id">
+                      <option :value="g.id" x-text="g.name"></option>
+                    </template>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Tags</label>
+                  <div
+                    class="flex flex-wrap gap-2 p-3 bg-terminal-surface border border-terminal-border rounded min-h-[50px]">
+                    <template x-for="tag in tags" :key="tag.id">
+                      <button type="button" @click="toggleTag(tag.id)" class="text-[10px] px-2 py-1 rounded transition"
+                        :class="formData.tag_ids.includes(tag.id) ? '' : 'opacity-40 hover:opacity-70'"
+                        :style="`background: ${tag.color}30; color: ${tag.color}; border: 1px solid ${formData.tag_ids.includes(tag.id) ? tag.color : 'transparent'}`"
+                        x-text="tag.name"></button>
+                    </template>
+                    <span x-show="tags.length === 0" class="text-terminal-muted text-xs">No tags created</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- HTTP / JSON HTTP Fields -->
+              <div x-show="formData.type === 'http' || formData.type === 'json_http'"
+                class="space-y-6 mb-8 p-6 bg-terminal-surface border border-terminal-border rounded-lg">
+                <div class="text-xs text-terminal-muted uppercase tracking-widest mb-4">HTTP Configuration</div>
+                <div class="grid md:grid-cols-4 gap-4">
+                  <div class="md:col-span-3">
+                    <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">URL</label>
+                    <input type="url" x-model="formData.url"
+                      :required="formData.type === 'http' || formData.type === 'json_http'"
+                      class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
+                      placeholder="https://api.example.com/health">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Method</label>
+                    <select x-model="formData.method"
+                      class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono">
+                      <option value="GET">GET</option>
+                      <option value="POST">POST</option>
+                      <option value="PUT">PUT</option>
+                      <option value="HEAD">HEAD</option>
+                    </select>
+                  </div>
+                </div>
+                <div x-show="formData.type === 'http'">
+                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Expected Status
+                    Codes</label>
+                  <input type="text" x-model="expectedStatusCodesInput" @input="updateStatusCodesArray()"
+                    class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
+                    placeholder="200, 201, 204">
+                  <div class="text-[10px] text-terminal-muted mt-1">Comma-separated list</div>
+                </div>
+                <div x-show="formData.type === 'json_http'" class="space-y-4 pt-4 border-t border-terminal-border">
+                  <div class="text-xs text-terminal-yellow uppercase tracking-widest">JSON Assertion</div>
+                  <div class="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">JSON
+                        Path</label>
+                      <input type="text" x-model="formData.json_path"
+                        class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
+                        placeholder="data.status">
+                    </div>
+                    <div>
+                      <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Expected
+                        Value</label>
+                      <input type="text" x-model="formData.expected_json_value"
+                        class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
+                        placeholder="ok">
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Ping Fields -->
+              <div x-show="formData.type === 'ping'"
+                class="space-y-6 mb-8 p-6 bg-terminal-surface border border-terminal-border rounded-lg">
+                <div class="text-xs text-terminal-cyan uppercase tracking-widest mb-4">Ping Configuration</div>
+                <div>
+                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Host / IP
+                    Address</label>
+                  <input type="text" x-model="formData.host" :required="formData.type === 'ping'"
+                    class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
+                    placeholder="8.8.8.8 or google.com">
+                </div>
+              </div>
+
+              <!-- DNS Fields -->
+              <div x-show="formData.type === 'dns'"
+                class="space-y-6 mb-8 p-6 bg-terminal-surface border border-terminal-border rounded-lg">
+                <div class="text-xs text-terminal-green uppercase tracking-widest mb-4">DNS Configuration</div>
+                <div class="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Hostname</label>
+                    <input type="text" x-model="formData.dns_hostname" :required="formData.type === 'dns'"
+                      class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
+                      placeholder="example.com">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Record
+                      Type</label>
+                    <select x-model="formData.dns_record_type"
+                      class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono">
+                      <option value="A">A (IPv4)</option>
+                      <option value="AAAA">AAAA (IPv6)</option>
+                      <option value="CNAME">CNAME</option>
+                      <option value="MX">MX</option>
+                      <option value="TXT">TXT</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Expected Value
+                    (Optional)</label>
+                  <input type="text" x-model="formData.expected_dns_value"
+                    class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
+                    placeholder="1.2.3.4">
+                </div>
+              </div>
+
+              <!-- PostgreSQL Fields -->
+              <div x-show="formData.type === 'postgres'"
+                class="space-y-6 mb-8 p-6 bg-terminal-surface border border-terminal-border rounded-lg">
+                <div class="text-xs text-terminal-purple uppercase tracking-widest mb-4">PostgreSQL Configuration</div>
+                <div>
+                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Connection
+                    String</label>
+                  <input type="text" x-model="formData.postgres_conn_string" :required="formData.type === 'postgres'"
+                    class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
+                    placeholder="postgres://user:pass@localhost:5432/dbname">
+                </div>
+                <div class="pt-4 border-t border-terminal-border">
+                  <div class="text-xs text-terminal-purple uppercase tracking-widest mb-4">Query Assertion (Optional)
+                  </div>
+                  <div class="space-y-4">
+                    <div>
+                      <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">SQL
+                        Query</label>
+                      <textarea x-model="formData.postgres_query" rows="2"
+                        class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
+                        placeholder="SELECT 1"></textarea>
+                    </div>
+                    <div>
+                      <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Expected
+                        Value</label>
+                      <input type="text" x-model="formData.expected_query_value"
+                        class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
+                        placeholder="1">
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Tailscale Fields -->
+              <div x-show="formData.type === 'tailscale'"
+                x-init="$watch('formData.type', val => val === 'tailscale' && loadTailscaleDevices())"
+                class="space-y-6 mb-8 p-6 bg-terminal-surface border border-terminal-border rounded-lg">
+                <div class="text-xs text-terminal-cyan uppercase tracking-widest mb-4">Tailscale Configuration</div>
+                <div>
+                  <div class="flex items-center justify-between mb-2">
+                    <label class="block text-[10px] uppercase text-terminal-muted tracking-widest">Device</label>
+                    <button type="button" @click="loadTailscaleDevices()" :disabled="loadingTailscaleDevices"
+                      class="text-[10px] text-terminal-cyan hover:text-terminal-green disabled:opacity-50 flex items-center gap-1">
+                      <template x-if="loadingTailscaleDevices"><svg class="animate-spin w-3 h-3" fill="none"
+                          viewBox="0 0 24 24">
+                          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                          </circle>
+                          <path class="opacity-75" fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                          </path>
+                        </svg></template>
+                      <span x-text="loadingTailscaleDevices ? 'Loading...' : '↻ Refresh'"></span>
+                    </button>
+                  </div>
+                  <template x-if="tailscaleDevices.length > 0">
+                    <select x-model="formData.tailscale_device_id" :required="formData.type === 'tailscale'"
+                      class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono">
+                      <option value="">Select a device...</option>
+                      <template x-for="device in tailscaleDevices" :key="device.id">
+                        <option :value="device.id"
+                          x-text="`${device.hostname || device.name} (${device.addresses[0] || 'no IP'}) - ${device.online ? '🟢 Online' : '🔴 Offline'}`">
+                        </option>
+                      </template>
+                    </select>
+                  </template>
+                  <template x-if="tailscaleDevices.length === 0 && !loadingTailscaleDevices">
+                    <div>
+                      <input type="text" x-model="formData.tailscale_device_id"
+                        :required="formData.type === 'tailscale'"
+                        class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
+                        placeholder="Device ID (configure Tailscale in Settings first)">
+                    </div>
+                  </template>
+                  <div x-show="formData.tailscale_device_id && tailscaleDevices.length > 0"
+                    class="text-[10px] text-terminal-muted mt-2">
+                    ID: <span class="text-terminal-cyan" x-text="formData.tailscale_device_id"></span>
+                  </div>
+                </div>
+                <div x-show="!settings.tailscale_api_key || !settings.tailscale_tailnet"
+                  class="p-3 bg-terminal-yellow/10 border border-terminal-yellow/30 rounded text-[10px] text-terminal-yellow">
+                  Configure Tailscale API credentials in Settings before using this check type
+                </div>
+              </div>
+
+              <!-- Tailscale Service Fields -->
+              <div x-show="formData.type === 'tailscale_service'"
+                x-init="$watch('formData.type', val => val === 'tailscale_service' && loadTailscaleDevices())"
+                class="space-y-6 mb-8 p-6 bg-terminal-surface border border-terminal-border rounded-lg">
+                <div class="text-xs text-terminal-purple uppercase tracking-widest mb-4">Tailscale Service Configuration
+                </div>
+                <div>
+                  <div class="flex items-center justify-between mb-2">
+                    <label class="block text-[10px] uppercase text-terminal-muted tracking-widest">Device /
+                      Hostname</label>
+                    <button type="button" @click="loadTailscaleDevices()" :disabled="loadingTailscaleDevices"
+                      class="text-[10px] text-terminal-cyan hover:text-terminal-green disabled:opacity-50 flex items-center gap-1">
+                      <template x-if="loadingTailscaleDevices"><svg class="animate-spin w-3 h-3" fill="none"
+                          viewBox="0 0 24 24">
+                          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                          </circle>
+                          <path class="opacity-75" fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                          </path>
+                        </svg></template>
+                      <span x-text="loadingTailscaleDevices ? 'Loading...' : '↻ Refresh'"></span>
+                    </button>
+                  </div>
+                  <template x-if="tailscaleDevices.length > 0">
+                    <select x-model="formData.tailscale_service_host" :required="formData.type === 'tailscale_service'"
+                      class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono">
+                      <option value="">Select a device...</option>
+                      <template x-for="device in tailscaleDevices" :key="device.id">
+                        <option :value="device.hostname"
+                          x-text="`${device.hostname || device.name} (${device.addresses[0] || 'no IP'}) - ${device.online ? '🟢 Online' : '🔴 Offline'}`">
+                        </option>
+                      </template>
+                    </select>
+                  </template>
+                  <template x-if="tailscaleDevices.length === 0 && !loadingTailscaleDevices">
+                    <div>
+                      <input type="text" x-model="formData.tailscale_service_host"
+                        :required="formData.type === 'tailscale_service'"
+                        class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
+                        placeholder="Device hostname (configure Tailscale in Settings first)">
+                    </div>
+                  </template>
+                </div>
+                <div class="grid md:grid-cols-3 gap-4">
+                  <div>
+                    <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Protocol</label>
+                    <select x-model="formData.tailscale_service_protocol"
+                      class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono">
+                      <option value="http">HTTP</option>
+                      <option value="https">HTTPS</option>
+                      <option value="tcp">TCP</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Port</label>
+                    <input type="number" x-model="formData.tailscale_service_port"
+                      :required="formData.type === 'tailscale_service'" min="1" max="65535"
+                      class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
+                      placeholder="80">
+                  </div>
+                  <div
+                    x-show="formData.tailscale_service_protocol === 'http' || formData.tailscale_service_protocol === 'https'">
+                    <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Path</label>
+                    <input type="text" x-model="formData.tailscale_service_path"
+                      class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
+                      placeholder="/">
+                  </div>
+                </div>
+                <div
+                  x-show="formData.tailscale_service_protocol === 'http' || formData.tailscale_service_protocol === 'https'">
+                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Expected Status
+                    Codes</label>
+                  <input type="text" x-model="expectedStatusCodesInput" @input="updateStatusCodesArray()"
+                    class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
+                    placeholder="200, 201, 204">
+                  <div class="text-[10px] text-terminal-muted mt-1">Comma-separated list (default: 200)</div>
+                </div>
+                <div x-show="!settings.tailscale_api_key || !settings.tailscale_tailnet"
+                  class="p-3 bg-terminal-yellow/10 border border-terminal-yellow/30 rounded text-[10px] text-terminal-yellow">
+                  Configure Tailscale API credentials in Settings before using this check type
+                </div>
+              </div>
+
+              <div
+                class="flex items-center gap-3 p-4 bg-terminal-surface border border-terminal-border rounded-lg mb-8">
+                <input type="checkbox" x-model="formData.enabled" id="enabled"
+                  class="w-4 h-4 rounded bg-terminal-bg border-terminal-border text-terminal-green focus:ring-terminal-green">
+                <label for="enabled" class="text-sm">Active Monitoring</label>
+              </div>
+
+              <div class="flex gap-4">
+                <button type="submit"
+                  class="flex-1 bg-terminal-green text-terminal-bg px-6 py-4 rounded font-bold hover:opacity-90 transition text-sm uppercase tracking-wide">Save
+                  Monitor</button>
+                <button type="button" @click="closeModals()"
+                  class="px-6 py-4 bg-terminal-surface border border-terminal-border text-terminal-muted hover:text-terminal-text rounded transition text-sm uppercase tracking-wide">Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Group Modal -->
+      <div x-show="showGroupModal" x-cloak
+        class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50" x-transition.opacity
+        @click.self="showGroupModal = false">
+        <div class="bg-terminal-surface border border-terminal-border rounded-lg shadow-2xl p-8 w-full max-w-lg"
+          @click.stop>
+          <h3 class="text-lg font-bold text-terminal-green mb-6" x-text="editingGroup ? '$ edit group' : '$ new group'">
+          </h3>
+          <form @submit.prevent="saveGroup()">
+            <div class="space-y-4 mb-6">
+              <div>
+                <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Group Name</label>
+                <input type="text" x-model="groupForm.name" required
+                  class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
+                  placeholder="Infrastructure">
+              </div>
+              <div>
+                <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Sort Order</label>
+                <input type="number" x-model="groupForm.sort_order"
+                  class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
+                  placeholder="0">
+              </div>
+            </div>
+            <div class="flex gap-4">
+              <button type="submit"
+                class="flex-1 bg-terminal-green text-terminal-bg px-4 py-3 rounded font-bold hover:opacity-90 transition text-sm uppercase tracking-wide">Save</button>
+              <button type="button" x-show="editingGroup" @click="deleteGroup(editingGroup.id)"
+                class="px-4 py-3 bg-terminal-red/20 text-terminal-red rounded transition text-sm uppercase tracking-wide">Delete</button>
+              <button type="button" @click="showGroupModal = false; editingGroup = null"
+                class="px-4 py-3 bg-terminal-border text-terminal-muted hover:text-terminal-text rounded transition text-sm uppercase tracking-wide">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Tag Modal -->
+      <div x-show="showTagModal" x-cloak
+        class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50" x-transition.opacity
+        @click.self="showTagModal = false">
+        <div class="bg-terminal-surface border border-terminal-border rounded-lg shadow-2xl p-8 w-full max-w-lg"
+          @click.stop>
+          <h3 class="text-lg font-bold text-terminal-green mb-6" x-text="editingTag ? '$ edit tag' : '$ new tag'"></h3>
+          <form @submit.prevent="saveTag()">
+            <div class="space-y-4 mb-6">
+              <div>
+                <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Tag Name</label>
+                <input type="text" x-model="tagForm.name" required
+                  class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
+                  placeholder="production">
+              </div>
+              <div>
+                <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Color</label>
+                <div class="flex gap-2 flex-wrap">
+                  <template x-for="color in tagColors" :key="color">
+                    <button type="button" @click="tagForm.color = color" class="w-8 h-8 rounded border-2 transition"
+                      :class="tagForm.color === color ? 'border-white' : 'border-transparent'"
+                      :style="`background: ${color}`"></button>
+                  </template>
+                </div>
+              </div>
+            </div>
+            <div class="flex gap-4">
+              <button type="submit"
+                class="flex-1 bg-terminal-green text-terminal-bg px-4 py-3 rounded font-bold hover:opacity-90 transition text-sm uppercase tracking-wide">Save</button>
+              <button type="button" x-show="editingTag" @click="deleteTag(editingTag.id)"
+                class="px-4 py-3 bg-terminal-red/20 text-terminal-red rounded transition text-sm uppercase tracking-wide">Delete</button>
+              <button type="button" @click="showTagModal = false; editingTag = null"
+                class="px-4 py-3 bg-terminal-border text-terminal-muted hover:text-terminal-text rounded transition text-sm uppercase tracking-wide">Cancel</button>
+            </div>
+          </form>
+
+          <div x-show="tags.length > 0" class="mt-6 pt-6 border-t border-terminal-border">
+            <div class="text-xs text-terminal-muted mb-3">Existing Tags (click to edit)</div>
+            <div class="flex flex-wrap gap-2">
+              <template x-for="tag in tags" :key="tag.id">
+                <button @click="editTag(tag)" class="text-[10px] px-3 py-1.5 rounded hover:opacity-80 transition"
+                  :style="`background: ${tag.color}30; color: ${tag.color}`" x-text="tag.name"></button>
+              </template>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Settings Modal -->
+      <div x-show="showSettingsModal" x-cloak
+        class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+        x-transition.opacity @click.self="showSettingsModal = false">
+        <div
+          class="bg-terminal-surface border border-terminal-border rounded-lg shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col"
+          @click.stop>
+          <div class="p-8 pb-4 flex-shrink-0">
+            <h3 class="text-lg font-bold text-terminal-green flex items-center gap-2"><span
+                class="text-terminal-muted">$</span> settings</h3>
+          </div>
+          <div class="px-8 pb-4 overflow-y-auto flex-1">
+            <div class="space-y-6">
+              <div class="text-xs text-terminal-muted uppercase tracking-widest mb-2">Discord Notifications</div>
+              <div>
+                <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Webhook URL</label>
+                <input type="url" x-model="settings.discord_webhook_url"
+                  class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
+                  placeholder="https://discord.com/api/webhooks/...">
+              </div>
+              <button type="button" @click="testWebhook()" :disabled="testingWebhook || !settings.discord_webhook_url"
+                class="w-full bg-terminal-border text-terminal-text px-4 py-3 rounded font-bold hover:bg-terminal-muted transition text-sm uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                <template x-if="testingWebhook"><svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                    </path>
+                  </svg></template>
+                <span x-text="testingWebhook ? 'Sending...' : 'Test Webhook'"></span>
+              </button>
+              <div x-show="webhookTestResult" class="text-sm p-3 rounded"
+                :class="webhookTestResult?.success ? 'bg-terminal-green/20 text-terminal-green' : 'bg-terminal-red/20 text-terminal-red'"
+                x-text="webhookTestResult?.message"></div>
+
+              <div class="border-t border-terminal-border pt-6 mt-6">
+                <div class="text-xs text-terminal-muted uppercase tracking-widest mb-2">Gotify Notifications</div>
+                <div class="space-y-4">
+                  <div>
+                    <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Server
+                      URL</label>
+                    <input type="url" x-model="settings.gotify_server_url"
+                      class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
+                      placeholder="https://gotify.example.com">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">App
+                      Token</label>
+                    <input type="password" x-model="settings.gotify_token"
+                      class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
+                      placeholder="Axxxxxxxxxxxxx">
+                  </div>
+                  <button type="button" @click="testGotify()"
+                    :disabled="testingGotify || !settings.gotify_server_url || !settings.gotify_token"
+                    class="w-full bg-terminal-border text-terminal-text px-4 py-3 rounded font-bold hover:bg-terminal-muted transition text-sm uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                    <template x-if="testingGotify"><svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                        </circle>
+                        <path class="opacity-75" fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                        </path>
+                      </svg></template>
+                    <span x-text="testingGotify ? 'Sending...' : 'Test Gotify'"></span>
+                  </button>
+                  <div x-show="gotifyTestResult" class="text-sm p-3 rounded"
+                    :class="gotifyTestResult?.success ? 'bg-terminal-green/20 text-terminal-green' : 'bg-terminal-red/20 text-terminal-red'"
+                    x-text="gotifyTestResult?.message"></div>
+                </div>
+              </div>
+
+              <div class="border-t border-terminal-border pt-6 mt-6">
+                <div class="text-xs text-terminal-cyan uppercase tracking-widest mb-4">Tailscale Integration</div>
+                <div class="space-y-4">
+                  <div>
+                    <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">API Key</label>
+                    <input type="password" x-model="settings.tailscale_api_key"
+                      class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
+                      placeholder="tskey-api-...">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Tailnet</label>
+                    <input type="text" x-model="settings.tailscale_tailnet"
+                      class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
+                      placeholder="example.com or your-org.github">
+                    <div class="text-[10px] text-terminal-muted mt-1">Your Tailscale tailnet name or organization</div>
+                  </div>
+                  <button type="button" @click="testTailscale()"
+                    :disabled="testingTailscale || !settings.tailscale_api_key || !settings.tailscale_tailnet"
+                    class="w-full bg-terminal-border text-terminal-text px-4 py-3 rounded font-bold hover:bg-terminal-muted transition text-sm uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                    <template x-if="testingTailscale"><svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                        </circle>
+                        <path class="opacity-75" fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                        </path>
+                      </svg></template>
+                    <span x-text="testingTailscale ? 'Testing...' : 'Test Connection'"></span>
+                  </button>
+                  <div x-show="tailscaleTestResult" class="text-sm p-3 rounded"
+                    :class="tailscaleTestResult?.success ? 'bg-terminal-green/20 text-terminal-green' : 'bg-terminal-red/20 text-terminal-red'"
+                    x-text="tailscaleTestResult?.message"></div>
+                </div>
+              </div>
+
+              <!-- Passkeys Section -->
+              <div class="border-t border-terminal-border pt-6 mt-6">
+                <div
+                  class="text-xs text-terminal-blue uppercase tracking-widest mb-4 flex items-center justify-between">
+                  <span>Passkeys</span>
+                  <button @click="registerPasskey()" :disabled="registeringPasskey"
+                    class="text-xs bg-terminal-border hover:bg-terminal-muted px-3 py-1 rounded transition disabled:opacity-50">
+                    <span x-text="registeringPasskey ? 'Registering...' : '+ Add Passkey'"></span>
+                  </button>
+                </div>
+
+                <div class="space-y-2 mb-4">
+                  <template x-for="passkey in passkeys" :key="passkey.id">
+                    <div
+                      class="flex items-center justify-between p-3 bg-terminal-bg rounded border border-terminal-border hover:border-terminal-muted transition">
+                      <div class="flex-1 flex items-center gap-3">
+                        <svg class="w-5 h-5 text-terminal-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z">
+                          </path>
+                        </svg>
+                        <div>
+                          <div class="text-sm font-mono text-terminal-text" x-text="passkey.name"></div>
+                          <div class="text-[10px] text-terminal-muted">
+                            Added: <span x-text="passkey.created_at"></span>
+                          </div>
+                        </div>
+                      </div>
+                      <button @click="deletePasskey(passkey.id)"
+                        class="text-terminal-red hover:text-terminal-red/80 text-xs px-3 py-1 rounded transition">
+                        Delete
+                      </button>
+                    </div>
+                  </template>
+                  <div x-show="!passkeys || passkeys.length === 0" class="text-center py-6 text-terminal-muted text-sm">
+                    No passkeys registered. Add one for faster, passwordless login.
+                  </div>
+                </div>
+                <div class="text-xs text-terminal-muted bg-terminal-bg p-3 rounded border border-terminal-border">
+                  <div class="font-semibold mb-1">About Passkeys</div>
+                  <p>Passkeys let you sign in with Touch ID, Face ID, Windows Hello, or a security key. They're more
+                    secure than passwords and never leave your device.</p>
+                </div>
+              </div>
+
+              <!-- API Keys Section -->
+              <div class="border-t border-terminal-border pt-6 mt-6">
+                <div
+                  class="text-xs text-terminal-purple uppercase tracking-widest mb-4 flex items-center justify-between">
+                  <span>API Keys</span>
+                  <button @click="showCreateAPIKeyForm = !showCreateAPIKeyForm"
+                    class="text-xs bg-terminal-border hover:bg-terminal-muted px-3 py-1 rounded transition">
+                    <span x-text="showCreateAPIKeyForm ? 'Cancel' : '+ New Key'"></span>
+                  </button>
+                </div>
+
+                <!-- Create API Key Form -->
+                <div x-show="showCreateAPIKeyForm"
+                  class="mb-4 p-4 bg-terminal-bg rounded border border-terminal-border">
+                  <div class="space-y-3">
+                    <div>
+                      <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Key
+                        Name</label>
+                      <input type="text" x-model="newAPIKeyName"
+                        class="w-full bg-terminal-surface border border-terminal-border text-terminal-text px-3 py-2 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
+                        placeholder="e.g., Production Server, CLI Tool">
+                    </div>
+                    <button @click="createAPIKey()" :disabled="!newAPIKeyName || creatingAPIKey"
+                      class="w-full bg-terminal-green text-terminal-bg px-4 py-2 rounded font-bold hover:opacity-90 transition text-xs uppercase tracking-wide disabled:opacity-50">
+                      <span x-text="creatingAPIKey ? 'Creating...' : 'Create API Key'"></span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- New API Key Display (show once after creation) -->
+                <div x-show="newlyCreatedAPIKey"
+                  class="mb-4 p-4 bg-terminal-green/10 border border-terminal-green rounded">
+                  <div class="text-xs text-terminal-green font-bold mb-2">API Key Created!</div>
+                  <div class="text-[10px] text-terminal-muted mb-2">Save this key securely. You won't be able to see it
+                    again.</div>
+                  <div class="flex gap-2">
+                    <input type="text" readonly :value="newlyCreatedAPIKey"
+                      class="flex-1 bg-terminal-bg border border-terminal-border text-terminal-text px-3 py-2 rounded font-mono text-xs select-all">
+                    <button @click="copyAPIKey(newlyCreatedAPIKey)"
+                      class="bg-terminal-border hover:bg-terminal-muted px-4 py-2 rounded transition text-xs">
+                      <span x-text="apiKeyCopied ? 'Copied!' : 'Copy'"></span>
+                    </button>
+                  </div>
+                  <button @click="newlyCreatedAPIKey = null; loadAPIKeys()"
+                    class="mt-2 text-xs text-terminal-muted hover:text-terminal-text">
+                    Done
+                  </button>
+                </div>
+
+                <!-- API Keys List -->
+                <div class="space-y-2">
+                  <template x-for="key in apiKeys" :key="key.id">
+                    <div
+                      class="flex items-center justify-between p-3 bg-terminal-bg rounded border border-terminal-border hover:border-terminal-muted transition">
+                      <div class="flex-1">
+                        <div class="text-sm font-mono text-terminal-text" x-text="key.name"></div>
+                        <div class="text-[10px] text-terminal-muted flex gap-3 mt-1">
+                          <span>Created: <span x-text="new Date(key.created_at).toLocaleDateString()"></span></span>
+                          <span x-show="key.last_used_at">Last used: <span
+                              x-text="new Date(key.last_used_at).toLocaleDateString()"></span></span>
+                        </div>
+                      </div>
+                      <button @click="deleteAPIKey(key.id)"
+                        class="text-terminal-red hover:text-terminal-red/80 text-xs px-3 py-1 rounded transition">
+                        Delete
+                      </button>
+                    </div>
+                  </template>
+                  <div x-show="!apiKeys || apiKeys.length === 0" class="text-center py-6 text-terminal-muted text-sm">
+                    No API keys yet. Create one to enable programmatic access.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="p-8 pt-4 flex gap-4 flex-shrink-0 border-t border-terminal-border">
+            <button @click="saveSettings()"
+              class="flex-1 bg-terminal-green text-terminal-bg px-4 py-3 rounded font-bold hover:opacity-90 transition text-sm uppercase tracking-wide">Save
+              Settings</button>
+            <button @click="showSettingsModal = false"
               class="px-4 py-3 bg-terminal-border text-terminal-muted hover:text-terminal-text rounded transition text-sm uppercase tracking-wide">Cancel</button>
           </div>
-        </form>
-
-        <div x-show="tags.length > 0" class="mt-6 pt-6 border-t border-terminal-border">
-          <div class="text-xs text-terminal-muted mb-3">Existing Tags (click to edit)</div>
-          <div class="flex flex-wrap gap-2">
-            <template x-for="tag in tags" :key="tag.id">
-              <button @click="editTag(tag)" class="text-[10px] px-3 py-1.5 rounded hover:opacity-80 transition"
-                :style="`background: ${tag.color}30; color: ${tag.color}`" x-text="tag.name"></button>
-            </template>
-          </div>
         </div>
       </div>
-    </div>
 
-    <!-- Settings Modal -->
-    <div x-show="showSettingsModal" x-cloak
-      class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" x-transition.opacity
-      @click.self="showSettingsModal = false">
-      <div
-        class="bg-terminal-surface border border-terminal-border rounded-lg shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col"
-        @click.stop>
-        <div class="p-8 pb-4 flex-shrink-0">
-          <h3 class="text-lg font-bold text-terminal-green flex items-center gap-2"><span
-              class="text-terminal-muted">$</span> settings</h3>
-        </div>
-        <div class="px-8 pb-4 overflow-y-auto flex-1">
-          <div class="space-y-6">
-            <div class="text-xs text-terminal-muted uppercase tracking-widest mb-2">Discord Notifications</div>
-            <div>
-              <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Webhook URL</label>
-              <input type="url" x-model="settings.discord_webhook_url"
-                class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
-                placeholder="https://discord.com/api/webhooks/...">
-            </div>
-            <button type="button" @click="testWebhook()" :disabled="testingWebhook || !settings.discord_webhook_url"
-              class="w-full bg-terminal-border text-terminal-text px-4 py-3 rounded font-bold hover:bg-terminal-muted transition text-sm uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-              <template x-if="testingWebhook"><svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                  </path>
-                </svg></template>
-              <span x-text="testingWebhook ? 'Sending...' : 'Test Webhook'"></span>
-            </button>
-            <div x-show="webhookTestResult" class="text-sm p-3 rounded"
-              :class="webhookTestResult?.success ? 'bg-terminal-green/20 text-terminal-green' : 'bg-terminal-red/20 text-terminal-red'"
-              x-text="webhookTestResult?.message"></div>
-
-            <div class="border-t border-terminal-border pt-6 mt-6">
-              <div class="text-xs text-terminal-muted uppercase tracking-widest mb-2">Gotify Notifications</div>
-              <div class="space-y-4">
-                <div>
-                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Server URL</label>
-                  <input type="url" x-model="settings.gotify_server_url"
-                    class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
-                    placeholder="https://gotify.example.com">
-                </div>
-                <div>
-                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">App Token</label>
-                  <input type="password" x-model="settings.gotify_token"
-                    class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
-                    placeholder="Axxxxxxxxxxxxx">
-                </div>
-                <button type="button" @click="testGotify()"
-                  :disabled="testingGotify || !settings.gotify_server_url || !settings.gotify_token"
-                  class="w-full bg-terminal-border text-terminal-text px-4 py-3 rounded font-bold hover:bg-terminal-muted transition text-sm uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                  <template x-if="testingGotify"><svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                      <path class="opacity-75" fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                      </path>
-                    </svg></template>
-                  <span x-text="testingGotify ? 'Sending...' : 'Test Gotify'"></span>
-                </button>
-                <div x-show="gotifyTestResult" class="text-sm p-3 rounded"
-                  :class="gotifyTestResult?.success ? 'bg-terminal-green/20 text-terminal-green' : 'bg-terminal-red/20 text-terminal-red'"
-                  x-text="gotifyTestResult?.message"></div>
-              </div>
-            </div>
-
-            <div class="border-t border-terminal-border pt-6 mt-6">
-              <div class="text-xs text-terminal-cyan uppercase tracking-widest mb-4">Tailscale Integration</div>
-              <div class="space-y-4">
-                <div>
-                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">API Key</label>
-                  <input type="password" x-model="settings.tailscale_api_key"
-                    class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
-                    placeholder="tskey-api-...">
-                </div>
-                <div>
-                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Tailnet</label>
-                  <input type="text" x-model="settings.tailscale_tailnet"
-                    class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono text-sm"
-                    placeholder="example.com or your-org.github">
-                  <div class="text-[10px] text-terminal-muted mt-1">Your Tailscale tailnet name or organization</div>
-                </div>
-                <button type="button" @click="testTailscale()"
-                  :disabled="testingTailscale || !settings.tailscale_api_key || !settings.tailscale_tailnet"
-                  class="w-full bg-terminal-border text-terminal-text px-4 py-3 rounded font-bold hover:bg-terminal-muted transition text-sm uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                  <template x-if="testingTailscale"><svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                      <path class="opacity-75" fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                      </path>
-                    </svg></template>
-                  <span x-text="testingTailscale ? 'Testing...' : 'Test Connection'"></span>
-                </button>
-                <div x-show="tailscaleTestResult" class="text-sm p-3 rounded"
-                  :class="tailscaleTestResult?.success ? 'bg-terminal-green/20 text-terminal-green' : 'bg-terminal-red/20 text-terminal-red'"
-                  x-text="tailscaleTestResult?.message"></div>
-              </div>
-            </div>
+      <!-- History Modal -->
+      <div x-show="showHistoryModal" x-cloak
+        class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50" x-transition.opacity
+        @click.self="closeModals()">
+        <div
+          class="bg-terminal-surface border border-terminal-border rounded-lg shadow-2xl p-6 w-full max-w-4xl max-h-[85vh] flex flex-col"
+          @click.stop>
+          <div class="flex justify-between items-center mb-6 border-b border-terminal-border pb-4">
+            <h3 class="font-bold flex items-center gap-2"><span class="text-terminal-muted">$</span> status changes
+              <span class="text-terminal-green" x-text="selectedCheck?.name"></span>
+            </h3>
+            <button @click="closeModals()" class="text-terminal-muted hover:text-terminal-text text-xl">&times;</button>
           </div>
-        </div>
-        <div class="p-8 pt-4 flex gap-4 flex-shrink-0 border-t border-terminal-border">
-          <button @click="saveSettings()"
-            class="flex-1 bg-terminal-green text-terminal-bg px-4 py-3 rounded font-bold hover:opacity-90 transition text-sm uppercase tracking-wide">Save
-            Settings</button>
-          <button @click="showSettingsModal = false"
-            class="px-4 py-3 bg-terminal-border text-terminal-muted hover:text-terminal-text rounded transition text-sm uppercase tracking-wide">Cancel</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- History Modal -->
-    <div x-show="showHistoryModal" x-cloak
-      class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50" x-transition.opacity
-      @click.self="closeModals()">
-      <div
-        class="bg-terminal-surface border border-terminal-border rounded-lg shadow-2xl p-6 w-full max-w-4xl max-h-[85vh] flex flex-col"
-        @click.stop>
-        <div class="flex justify-between items-center mb-6 border-b border-terminal-border pb-4">
-          <h3 class="font-bold flex items-center gap-2"><span class="text-terminal-muted">$</span> status changes <span
-              class="text-terminal-green" x-text="selectedCheck?.name"></span></h3>
-          <button @click="closeModals()" class="text-terminal-muted hover:text-terminal-text text-xl">&times;</button>
-        </div>
-        <div class="text-xs text-terminal-muted mb-4">Showing only status transitions (UP → DOWN or DOWN → UP)</div>
-        <div x-show="filteredHistory.length === 0" class="text-center py-10 text-terminal-muted">No status changes
-          recorded yet</div>
-        <div class="overflow-y-auto flex-grow" x-show="filteredHistory.length > 0">
-          <table class="w-full text-left text-sm">
-            <thead class="bg-terminal-bg sticky top-0 text-[10px] uppercase text-terminal-muted tracking-widest">
-              <tr>
-                <th class="px-4 py-3">timestamp</th>
-                <th class="px-4 py-3">change</th>
-                <th class="px-4 py-3">code</th>
-                <th class="px-4 py-3">latency</th>
-                <th class="px-4 py-3">message</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-terminal-border text-terminal-text">
-              <template x-for="entry in filteredHistory" :key="entry.id">
-                <tr class="hover:bg-terminal-border/30 transition-colors">
-                  <td class="px-4 py-3 text-xs text-terminal-muted" x-text="formatDate(entry.checked_at)"></td>
-                  <td class="px-4 py-3">
-                    <div class="flex items-center gap-2">
-                      <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase"
-                        :class="entry.prevSuccess ? 'bg-terminal-green/20 text-terminal-green' : 'bg-terminal-red/20 text-terminal-red'"
-                        x-text="entry.prevSuccess ? 'UP' : 'DOWN'"></span>
-                      <span class="text-terminal-muted">→</span>
-                      <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase"
-                        :class="entry.success ? 'bg-terminal-green/20 text-terminal-green' : 'bg-terminal-red/20 text-terminal-red'"
-                        x-text="entry.success ? 'UP' : 'DOWN'"></span>
-                    </div>
-                  </td>
-                  <td class="px-4 py-3 font-mono" x-text="entry.status_code || '-'"></td>
-                  <td class="px-4 py-3 font-mono" x-text="entry.response_time_ms + 'ms'"></td>
-                  <td class="px-4 py-3 text-terminal-red text-xs truncate max-w-xs" x-text="entry.error_message || '-'">
-                  </td>
+          <div class="text-xs text-terminal-muted mb-4">Showing only status transitions (UP → DOWN or DOWN → UP)</div>
+          <div x-show="filteredHistory.length === 0" class="text-center py-10 text-terminal-muted">No status changes
+            recorded yet</div>
+          <div class="overflow-y-auto flex-grow" x-show="filteredHistory.length > 0">
+            <table class="w-full text-left text-sm">
+              <thead class="bg-terminal-bg sticky top-0 text-[10px] uppercase text-terminal-muted tracking-widest">
+                <tr>
+                  <th class="px-4 py-3">timestamp</th>
+                  <th class="px-4 py-3">change</th>
+                  <th class="px-4 py-3">code</th>
+                  <th class="px-4 py-3">latency</th>
+                  <th class="px-4 py-3">message</th>
                 </tr>
-              </template>
-            </tbody>
-          </table>
+              </thead>
+              <tbody class="divide-y divide-terminal-border text-terminal-text">
+                <template x-for="entry in filteredHistory" :key="entry.id">
+                  <tr class="hover:bg-terminal-border/30 transition-colors">
+                    <td class="px-4 py-3 text-xs text-terminal-muted" x-text="formatDate(entry.checked_at)"></td>
+                    <td class="px-4 py-3">
+                      <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase"
+                          :class="entry.prevSuccess ? 'bg-terminal-green/20 text-terminal-green' : 'bg-terminal-red/20 text-terminal-red'"
+                          x-text="entry.prevSuccess ? 'UP' : 'DOWN'"></span>
+                        <span class="text-terminal-muted">→</span>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase"
+                          :class="entry.success ? 'bg-terminal-green/20 text-terminal-green' : 'bg-terminal-red/20 text-terminal-red'"
+                          x-text="entry.success ? 'UP' : 'DOWN'"></span>
+                      </div>
+                    </td>
+                    <td class="px-4 py-3 font-mono" x-text="entry.status_code || '-'"></td>
+                    <td class="px-4 py-3 font-mono" x-text="entry.response_time_ms + 'ms'"></td>
+                    <td class="px-4 py-3 text-terminal-red text-xs truncate max-w-xs"
+                      x-text="entry.error_message || '-'">
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
+    <!-- End Main App -->
   </div>
 
   <script>
     function app() {
       return {
+        // Auth state
+        authChecked: false,
+        needsSetup: false,
+        isAuthenticated: false,
+        currentUser: null,
+        loginForm: { username: '', password: '' },
+        setupForm: { username: '', password: '' },
+        loginError: '',
+        setupError: '',
+        loginLoading: false,
+        setupLoading: false,
+        passkeyLoading: false,
+        passkeys: [],
+        registeringPasskey: false,
+
+        // App state
         checks: [],
         groupedChecks: [],
         groups: [],
@@ -1077,6 +1336,12 @@
         tailscaleTestResult: null,
         tailscaleDevices: [],
         loadingTailscaleDevices: false,
+        apiKeys: [],
+        showCreateAPIKeyForm: false,
+        newAPIKeyName: '',
+        creatingAPIKey: false,
+        newlyCreatedAPIKey: null,
+        apiKeyCopied: false,
         expectedStatusCodesInput: '200',
         tagColors: ['#c4a7e7', '#f38ba8', '#f9e2af', '#7aa2f7', '#b794f6', '#94e2d5', '#fab387', '#f5c2e7', '#74c7ec', '#b4befe'],
         groupForm: { name: '', sort_order: 0 },
@@ -1093,11 +1358,308 @@
         eventSource: null,
 
         async init() {
-          await Promise.all([this.loadData(), this.loadSettings(), this.loadGroups(), this.loadTags()]);
-          this.expandedGroups = this.groupedChecks.map(g => g.id);
-          this.connectSSE();
-          // Refresh stats every 60 seconds
-          setInterval(() => this.loadStats(), 60000);
+          await this.checkAuth();
+          if (this.isAuthenticated) {
+            await Promise.all([this.loadData(), this.loadSettings(), this.loadGroups(), this.loadTags()]);
+            this.expandedGroups = this.groupedChecks.map(g => g.id);
+            this.connectSSE();
+            setInterval(() => this.loadStats(), 60000);
+
+            // Watch for settings modal opening to load API keys and passkeys
+            this.$watch('showSettingsModal', value => {
+              if (value) {
+                this.loadAPIKeys();
+                this.loadPasskeys();
+              }
+            });
+          }
+        },
+
+        async checkAuth() {
+          try {
+            const setupCheck = await fetch('/api/auth/setup/check');
+            const setupData = await setupCheck.json();
+            this.needsSetup = setupData.needs_setup;
+
+            if (!this.needsSetup) {
+              const authCheck = await fetch('/api/auth/check');
+              if (authCheck.ok) {
+                const authData = await authCheck.json();
+                this.isAuthenticated = true;
+                this.currentUser = authData.user;
+              }
+            }
+          } catch (error) {
+            console.error('Auth check failed:', error);
+          } finally {
+            this.authChecked = true;
+          }
+        },
+
+        async handleSetup() {
+          this.setupError = '';
+          this.setupLoading = true;
+          try {
+            const response = await fetch('/api/auth/setup', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.setupForm)
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              this.isAuthenticated = true;
+              this.needsSetup = false;
+              this.currentUser = data.user;
+              await Promise.all([this.loadData(), this.loadSettings(), this.loadGroups(), this.loadTags()]);
+              this.expandedGroups = this.groupedChecks.map(g => g.id);
+              this.connectSSE();
+              setInterval(() => this.loadStats(), 60000);
+            } else {
+              const error = await response.text();
+              this.setupError = error || 'Setup failed';
+            }
+          } catch (error) {
+            this.setupError = 'Network error. Please try again.';
+          } finally {
+            this.setupLoading = false;
+          }
+        },
+
+        async handleLogin() {
+          this.loginError = '';
+          this.loginLoading = true;
+          try {
+            const response = await fetch('/api/auth/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.loginForm)
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              this.isAuthenticated = true;
+              this.currentUser = data.user;
+              await Promise.all([this.loadData(), this.loadSettings(), this.loadGroups(), this.loadTags()]);
+              this.expandedGroups = this.groupedChecks.map(g => g.id);
+              this.connectSSE();
+              setInterval(() => this.loadStats(), 60000);
+            } else {
+              this.loginError = 'Invalid username or password';
+            }
+          } catch (error) {
+            this.loginError = 'Network error. Please try again.';
+          } finally {
+            this.loginLoading = false;
+          }
+        },
+
+        async handleLogout() {
+          try {
+            await fetch('/api/auth/logout', { method: 'POST' });
+            this.isAuthenticated = false;
+            this.currentUser = null;
+            if (this.eventSource) {
+              this.eventSource.close();
+            }
+          } catch (error) {
+            console.error('Logout failed:', error);
+          }
+        },
+
+        async handlePasskeyLogin() {
+          this.passkeyLoading = true;
+          this.loginError = '';
+
+          try {
+            // Begin login (username is optional for discoverable credentials)
+            const beginResponse = await fetch('/api/auth/passkey/begin-login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ username: this.loginForm.username || '' })
+            });
+
+            if (!beginResponse.ok) {
+              const error = await beginResponse.text();
+              this.loginError = error || 'Failed to start passkey login';
+              return;
+            }
+
+            const { options, token } = await beginResponse.json();
+
+            // Get credential from authenticator
+            const credential = await navigator.credentials.get({
+              publicKey: this.decodePublicKeyOptions(options.publicKey)
+            });
+
+            // Finish login
+            const finishResponse = await fetch('/api/auth/passkey/finish-login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                username: this.loginForm.username || '',
+                token: token,
+                id: credential.id,
+                rawId: this.bufferToBase64(credential.rawId),
+                type: credential.type,
+                response: {
+                  authenticatorData: this.bufferToBase64(credential.response.authenticatorData),
+                  clientDataJSON: this.bufferToBase64(credential.response.clientDataJSON),
+                  signature: this.bufferToBase64(credential.response.signature),
+                  userHandle: credential.response.userHandle ? this.bufferToBase64(credential.response.userHandle) : null
+                }
+              })
+            });
+
+            if (finishResponse.ok) {
+              const data = await finishResponse.json();
+              this.isAuthenticated = true;
+              this.currentUser = data.user;
+              await Promise.all([this.loadData(), this.loadSettings(), this.loadGroups(), this.loadTags()]);
+              this.expandedGroups = this.groupedChecks.map(g => g.id);
+              this.connectSSE();
+              setInterval(() => this.loadStats(), 60000);
+            } else {
+              this.loginError = 'Passkey authentication failed';
+            }
+          } catch (error) {
+            console.error('Passkey login error:', error);
+            this.loginError = error.message || 'Passkey login failed';
+          } finally {
+            this.passkeyLoading = false;
+          }
+        },
+
+        async registerPasskey() {
+          this.registeringPasskey = true;
+          try {
+            // Begin registration
+            const beginResponse = await fetch('/api/auth/passkey/begin-registration', {
+              method: 'POST'
+            });
+
+            if (!beginResponse.ok) {
+              alert('Failed to start passkey registration');
+              return;
+            }
+
+            const options = await beginResponse.json();
+
+            // Create credential
+            const credential = await navigator.credentials.create({
+              publicKey: this.decodePublicKeyOptions(options.publicKey)
+            });
+
+            const name = prompt('Give this passkey a name (e.g., "My iPhone", "Laptop"):') || 'Passkey';
+
+            // Finish registration
+            const finishResponse = await fetch('/api/auth/passkey/finish-registration', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: name,
+                id: credential.id,
+                rawId: this.bufferToBase64(credential.rawId),
+                type: credential.type,
+                response: {
+                  attestationObject: this.bufferToBase64(credential.response.attestationObject),
+                  clientDataJSON: this.bufferToBase64(credential.response.clientDataJSON)
+                }
+              })
+            });
+
+            if (finishResponse.ok) {
+              await this.loadPasskeys();
+              alert('Passkey registered successfully!');
+            } else {
+              alert('Failed to register passkey');
+            }
+          } catch (error) {
+            console.error('Passkey registration error:', error);
+            if (error.name !== 'NotAllowedError') {
+              alert('Passkey registration failed: ' + error.message);
+            }
+          } finally {
+            this.registeringPasskey = false;
+          }
+        },
+
+        async loadPasskeys() {
+          try {
+            const response = await fetch('/api/auth/passkeys');
+            if (response.ok) {
+              this.passkeys = await response.json();
+            }
+          } catch (error) {
+            console.error('Failed to load passkeys:', error);
+          }
+        },
+
+        async deletePasskey(id) {
+          if (!confirm('Are you sure you want to delete this passkey?')) return;
+
+          try {
+            const response = await fetch('/api/auth/passkeys', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id })
+            });
+
+            if (response.ok) {
+              this.passkeys = this.passkeys.filter(p => p.id !== id);
+            } else {
+              alert('Failed to delete passkey');
+            }
+          } catch (error) {
+            alert('Failed to delete passkey: ' + error.message);
+          }
+        },
+
+        // WebAuthn helper functions
+        decodePublicKeyOptions(publicKey) {
+          const decoded = { ...publicKey };
+
+          if (decoded.challenge) {
+            decoded.challenge = this.base64ToBuffer(decoded.challenge);
+          }
+
+          if (decoded.user && decoded.user.id) {
+            decoded.user.id = this.base64ToBuffer(decoded.user.id);
+          }
+
+          if (decoded.excludeCredentials) {
+            decoded.excludeCredentials = decoded.excludeCredentials.map(cred => ({
+              ...cred,
+              id: this.base64ToBuffer(cred.id)
+            }));
+          }
+
+          if (decoded.allowCredentials) {
+            decoded.allowCredentials = decoded.allowCredentials.map(cred => ({
+              ...cred,
+              id: this.base64ToBuffer(cred.id)
+            }));
+          }
+
+          return decoded;
+        },
+
+        base64ToBuffer(base64) {
+          const binary = atob(base64.replace(/-/g, '+').replace(/_/g, '/'));
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+          }
+          return bytes.buffer;
+        },
+
+        bufferToBase64(buffer) {
+          const bytes = new Uint8Array(buffer);
+          let binary = '';
+          for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
         },
 
         connectSSE() {
@@ -1312,6 +1874,70 @@
           } finally {
             this.loadingTailscaleDevices = false;
           }
+        },
+
+        async loadAPIKeys() {
+          try {
+            const response = await fetch('/api/auth/apikeys');
+            if (response.ok) {
+              this.apiKeys = await response.json();
+            }
+          } catch (error) {
+            console.error('Failed to load API keys:', error);
+          }
+        },
+
+        async createAPIKey() {
+          if (!this.newAPIKeyName) return;
+
+          this.creatingAPIKey = true;
+          try {
+            const response = await fetch('/api/auth/apikeys', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: this.newAPIKeyName })
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              this.newlyCreatedAPIKey = data.key;
+              this.newAPIKeyName = '';
+              this.showCreateAPIKeyForm = false;
+            } else {
+              alert('Failed to create API key');
+            }
+          } catch (error) {
+            alert('Failed to create API key: ' + error.message);
+          } finally {
+            this.creatingAPIKey = false;
+          }
+        },
+
+        async deleteAPIKey(id) {
+          if (!confirm('Are you sure you want to delete this API key? This action cannot be undone.')) return;
+
+          try {
+            const response = await fetch('/api/auth/apikeys', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id })
+            });
+
+            if (response.ok) {
+              this.apiKeys = this.apiKeys.filter(k => k.id !== id);
+            } else {
+              alert('Failed to delete API key');
+            }
+          } catch (error) {
+            alert('Failed to delete API key: ' + error.message);
+          }
+        },
+
+        copyAPIKey(key) {
+          navigator.clipboard.writeText(key).then(() => {
+            this.apiKeyCopied = true;
+            setTimeout(() => this.apiKeyCopied = false, 2000);
+          });
         },
 
         toggleExpand(checkId) {
