@@ -22,10 +22,10 @@ func NewPostgresDB(connString string) (*PostgresDB, error) {
 	}
 
 	// Configure connection pool for PostgreSQL
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(2)
 	db.SetConnMaxLifetime(5 * time.Minute)
-	db.SetConnMaxIdleTime(1 * time.Minute)
+	db.SetConnMaxIdleTime(2 * time.Minute)
 
 	// Test connection
 	if err := db.Ping(); err != nil {
@@ -390,7 +390,7 @@ func (d *PostgresDB) GetEnabledChecks() ([]models.Check, error) {
 	}
 	defer rows.Close()
 
-	var checks []models.Check
+	checks := make([]models.Check, 0, 100)
 	for rows.Next() {
 		var c models.Check
 		var statusCodesJSON string
@@ -413,10 +413,14 @@ func (d *PostgresDB) GetEnabledChecks() ([]models.Check, error) {
 }
 
 func (d *PostgresDB) AddHistory(h *models.CheckHistory) error {
+	responseBody := h.ResponseBody
+	if len(responseBody) > 10000 {
+		responseBody = responseBody[:10000] + "... (truncated)"
+	}
 	_, err := d.db.Exec(`
 		INSERT INTO check_history (check_id, status_code, response_time_ms, success, error_message, response_body)
 		VALUES ($1, $2, $3, $4, $5, $6)
-	`, h.CheckID, h.StatusCode, h.ResponseTimeMs, h.Success, h.ErrorMessage, h.ResponseBody)
+	`, h.CheckID, h.StatusCode, h.ResponseTimeMs, h.Success, h.ErrorMessage, responseBody)
 	return err
 }
 
@@ -489,7 +493,7 @@ func (d *PostgresDB) GetCheckHistoryAggregated(checkID int64, since *time.Time, 
 	}
 	defer rows.Close()
 
-	var history []models.CheckHistory
+	history := make([]models.CheckHistory, 0, limit)
 	for rows.Next() {
 		var h models.CheckHistory
 		if err := rows.Scan(&h.ID, &h.CheckID, &h.StatusCode, &h.ResponseTimeMs, &h.Success, &h.ErrorMessage, &h.CheckedAt); err != nil {
@@ -605,7 +609,7 @@ func (d *PostgresDB) GetAllGroups() ([]models.Group, error) {
 	}
 	defer rows.Close()
 
-	var groups []models.Group
+	groups := make([]models.Group, 0, 20)
 	for rows.Next() {
 		var g models.Group
 		if err := rows.Scan(&g.ID, &g.Name, &g.SortOrder, &g.CreatedAt); err != nil {
@@ -708,7 +712,7 @@ func (d *PostgresDB) GetCheckTags(checkID int64) ([]models.Tag, error) {
 	}
 	defer rows.Close()
 
-	var tags []models.Tag
+	tags := make([]models.Tag, 0, 5)
 	for rows.Next() {
 		var t models.Tag
 		if err := rows.Scan(&t.ID, &t.Name, &t.Color); err != nil {
@@ -817,7 +821,7 @@ func (d *PostgresDB) GetAPIKeysByUserID(userID int64) ([]models.APIKey, error) {
 	}
 	defer rows.Close()
 
-	var keys []models.APIKey
+	keys := make([]models.APIKey, 0, 10)
 	for rows.Next() {
 		var k models.APIKey
 		var lastUsedAt sql.NullTime
@@ -894,7 +898,7 @@ func (d *PostgresDB) GetWebAuthnCredentialsByUserID(userID int64) ([]models.WebA
 	}
 	defer rows.Close()
 
-	var creds []models.WebAuthnCredential
+	creds := make([]models.WebAuthnCredential, 0, 5)
 	for rows.Next() {
 		var c models.WebAuthnCredential
 		if err := rows.Scan(&c.ID, &c.UserID, &c.CredentialID, &c.PublicKey, &c.AttestationType, &c.AAGUID, &c.SignCount, &c.CloneWarning, &c.Name, &c.CreatedAt); err != nil {

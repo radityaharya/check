@@ -24,8 +24,8 @@ func NewSQLiteDB(dbPath string) (*SQLiteDB, error) {
 
 	// Configure connection pool for SQLite
 	// Allow multiple readers but serialize writes via WAL mode
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(2)
 	db.SetConnMaxLifetime(0)
 
 	d := &SQLiteDB{db: db}
@@ -409,7 +409,7 @@ func (d *SQLiteDB) GetEnabledChecks() ([]models.Check, error) {
 	}
 	defer rows.Close()
 
-	var checks []models.Check
+	checks := make([]models.Check, 0, 100)
 	for rows.Next() {
 		var c models.Check
 		var statusCodesJSON string
@@ -432,10 +432,14 @@ func (d *SQLiteDB) GetEnabledChecks() ([]models.Check, error) {
 }
 
 func (d *SQLiteDB) AddHistory(h *models.CheckHistory) error {
+	responseBody := h.ResponseBody
+	if len(responseBody) > 10000 {
+		responseBody = responseBody[:10000] + "... (truncated)"
+	}
 	_, err := d.db.Exec(`
 		INSERT INTO check_history (check_id, status_code, response_time_ms, success, error_message, response_body)
 		VALUES (?, ?, ?, ?, ?, ?)
-	`, h.CheckID, h.StatusCode, h.ResponseTimeMs, h.Success, h.ErrorMessage, h.ResponseBody)
+	`, h.CheckID, h.StatusCode, h.ResponseTimeMs, h.Success, h.ErrorMessage, responseBody)
 	return err
 }
 
@@ -509,7 +513,7 @@ func (d *SQLiteDB) GetCheckHistoryAggregated(checkID int64, since *time.Time, bu
 	}
 	defer rows.Close()
 
-	var history []models.CheckHistory
+	history := make([]models.CheckHistory, 0, limit)
 	for rows.Next() {
 		var h models.CheckHistory
 		if err := rows.Scan(&h.ID, &h.CheckID, &h.StatusCode, &h.ResponseTimeMs, &h.Success, &h.ErrorMessage, &h.CheckedAt); err != nil {
@@ -624,7 +628,7 @@ func (d *SQLiteDB) GetAllGroups() ([]models.Group, error) {
 	}
 	defer rows.Close()
 
-	var groups []models.Group
+	groups := make([]models.Group, 0, 20)
 	for rows.Next() {
 		var g models.Group
 		if err := rows.Scan(&g.ID, &g.Name, &g.SortOrder, &g.CreatedAt); err != nil {
@@ -739,7 +743,7 @@ func (d *SQLiteDB) GetCheckTags(checkID int64) ([]models.Tag, error) {
 	}
 	defer rows.Close()
 
-	var tags []models.Tag
+	tags := make([]models.Tag, 0, 5)
 	for rows.Next() {
 		var t models.Tag
 		if err := rows.Scan(&t.ID, &t.Name, &t.Color); err != nil {
@@ -850,7 +854,7 @@ func (d *SQLiteDB) GetAPIKeysByUserID(userID int64) ([]models.APIKey, error) {
 	}
 	defer rows.Close()
 
-	var keys []models.APIKey
+	keys := make([]models.APIKey, 0, 10)
 	for rows.Next() {
 		var k models.APIKey
 		var lastUsedAt sql.NullTime
@@ -940,7 +944,7 @@ func (d *SQLiteDB) GetWebAuthnCredentialsByUserID(userID int64) ([]models.WebAut
 	}
 	defer rows.Close()
 
-	var creds []models.WebAuthnCredential
+	creds := make([]models.WebAuthnCredential, 0, 5)
 	for rows.Next() {
 		var c models.WebAuthnCredential
 		if err := rows.Scan(&c.ID, &c.UserID, &c.CredentialID, &c.PublicKey, &c.AttestationType, &c.AAGUID, &c.SignCount, &c.CloneWarning, &c.Name, &c.CreatedAt); err != nil {

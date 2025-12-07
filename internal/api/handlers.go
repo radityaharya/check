@@ -101,7 +101,7 @@ func (h *Handlers) GetChecks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var checksWithStatus []models.CheckWithStatus
+	checksWithStatus := make([]models.CheckWithStatus, 0, len(checks))
 	for _, check := range checks {
 		var history []models.CheckHistory
 		lastStatus, _ := h.db.GetLastStatus(check.ID)
@@ -588,8 +588,8 @@ func (h *Handlers) GetTailscaleDevices(w http.ResponseWriter, r *http.Request) {
 		LastSeen  string   `json:"last_seen"`
 	}
 
-	result := make([]DeviceInfo, 0, len(devices))
-	for _, d := range devices {
+	result := make([]DeviceInfo, len(devices))
+	for i, d := range devices {
 		online := d.ConnectedToControl
 		if !online && !d.LastSeen.Time.IsZero() {
 			online = time.Since(d.LastSeen.Time) < 5*time.Minute
@@ -598,7 +598,7 @@ func (h *Handlers) GetTailscaleDevices(w http.ResponseWriter, r *http.Request) {
 		if !d.LastSeen.Time.IsZero() {
 			lastSeen = d.LastSeen.Time.Format(time.RFC3339)
 		}
-		result = append(result, DeviceInfo{
+		result[i] = DeviceInfo{
 			ID:        d.ID,
 			Name:      d.Name,
 			Hostname:  d.Hostname,
@@ -606,7 +606,7 @@ func (h *Handlers) GetTailscaleDevices(w http.ResponseWriter, r *http.Request) {
 			Online:    online,
 			OS:        d.OS,
 			LastSeen:  lastSeen,
-		})
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -891,24 +891,24 @@ func (h *Handlers) GetGroupedChecks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	groupMap := make(map[int64]*models.GroupWithChecks)
+	groupMap := make(map[int64]*models.GroupWithChecks, len(groups))
 	for _, g := range groups {
 		groupMap[g.ID] = &models.GroupWithChecks{
 			Group:  g,
-			Checks: []models.CheckWithStatus{},
+			Checks: make([]models.CheckWithStatus, 0, 10),
 			IsUp:   true,
 		}
 	}
 
 	ungrouped := &models.GroupWithChecks{
 		Group:  models.Group{ID: 0, Name: "Ungrouped"},
-		Checks: []models.CheckWithStatus{},
+		Checks: make([]models.CheckWithStatus, 0, 10),
 		IsUp:   true,
 	}
 
 	// Fetch last statuses and histories concurrently to avoid N+1 latency
-	lastStatusMap := make(map[int64]*models.CheckHistory)
-	historyMap := make(map[int64][]models.CheckHistory)
+	lastStatusMap := make(map[int64]*models.CheckHistory, len(checks))
+	historyMap := make(map[int64][]models.CheckHistory, len(checks))
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -1015,7 +1015,7 @@ func (h *Handlers) GetGroupedChecks(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	result := []models.GroupWithChecks{}
+	result := make([]models.GroupWithChecks, 0, len(groups)+1)
 	for _, g := range groups {
 		if gwc, ok := groupMap[g.ID]; ok {
 			result = append(result, *gwc)

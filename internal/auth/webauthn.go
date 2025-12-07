@@ -56,14 +56,35 @@ func (u WebAuthnUser) WebAuthnCredentials() []webauthn.Credential {
 
 type WebAuthnManager struct {
 	db       *db.Database
-	sessions map[string]*webauthn.SessionData
+	sessions map[string]*sessionEntry
+}
+
+type sessionEntry struct {
+	data      *webauthn.SessionData
+	expiresAt time.Time
 }
 
 func NewWebAuthnManager(rpID, rpOrigin string, database *db.Database) (*WebAuthnManager, error) {
-	return &WebAuthnManager{
+	wm := &WebAuthnManager{
 		db:       database,
-		sessions: make(map[string]*webauthn.SessionData),
-	}, nil
+		sessions: make(map[string]*sessionEntry),
+	}
+	go wm.cleanupExpiredSessions()
+	return wm, nil
+}
+
+func (wm *WebAuthnManager) cleanupExpiredSessions() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		now := time.Now()
+		for token, entry := range wm.sessions {
+			if now.After(entry.expiresAt) {
+				delete(wm.sessions, token)
+			}
+		}
+	}
 }
 
 func (wm *WebAuthnManager) getOriginFromRequest(r *http.Request) string {
@@ -167,7 +188,10 @@ func (wm *WebAuthnManager) BeginRegistration(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	wm.sessions[session.Token] = sessionData
+	wm.sessions[session.Token] = &sessionEntry{
+		data:      sessionData,
+		expiresAt: time.Now().Add(5 * time.Minute),
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(options)
@@ -195,11 +219,12 @@ func (wm *WebAuthnManager) FinishRegistration(w http.ResponseWriter, r *http.Req
 	credentials, _ := wm.db.GetWebAuthnCredentialsByUserID(user.ID)
 	webAuthnUser := WebAuthnUser{user: user, credentials: credentials}
 
-	sessionData, ok := wm.sessions[session.Token]
+	entry, ok := wm.sessions[session.Token]
 	if !ok {
 		http.Error(w, "session not found", http.StatusBadRequest)
 		return
 	}
+	sessionData := entry.data
 	delete(wm.sessions, session.Token)
 
 	// Read the full request body first to extract the name
@@ -276,7 +301,10 @@ func (wm *WebAuthnManager) BeginLogin(w http.ResponseWriter, r *http.Request) {
 		}
 
 		token, _ := generateSessionToken()
-		wm.sessions[token] = sessionData
+		wm.sessions[token] = &sessionEntry{
+			data:      sessionData,
+			expiresAt: time.Now().Add(5 * time.Minute),
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -310,7 +338,10 @@ func (wm *WebAuthnManager) BeginLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	token, _ := generateSessionToken()
-	wm.sessions[token] = sessionData
+	wm.sessions[token] = &sessionEntry{
+		data:      sessionData,
+		expiresAt: time.Now().Add(5 * time.Minute),
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -339,11 +370,12 @@ func (wm *WebAuthnManager) FinishLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sessionData, ok := wm.sessions[reqData.Token]
+	entry, ok := wm.sessions[reqData.Token]
 	if !ok {
 		http.Error(w, "session not found", http.StatusBadRequest)
 		return
 	}
+	sessionData := entry.data
 	delete(wm.sessions, reqData.Token)
 
 	// Reset body for WebAuthn parsing
