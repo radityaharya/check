@@ -107,7 +107,7 @@
 </head>
 
 <body class="bg-terminal-bg text-terminal-text font-mono min-h-screen">
-  <div x-data="app()" x-init="init()" class="min-h-screen">
+  <div x-data="app()" class="min-h-screen">
     <header class="bg-terminal-surface border-b border-terminal-border sticky top-0 z-40">
       <div class="container mx-auto px-6 py-4 flex justify-between items-center">
         <div class="flex items-center gap-3">
@@ -437,6 +437,12 @@
                   <div class="text-terminal-cyan font-bold mb-1">Tailscale</div>
                   <div class="text-[10px] text-terminal-muted">Device status</div>
                 </button>
+                <button type="button" @click="formData.type = 'tailscale_service'"
+                  class="p-4 rounded-lg border-2 transition text-left"
+                  :class="formData.type === 'tailscale_service' ? 'border-terminal-purple bg-terminal-purple/10' : 'border-terminal-border hover:border-terminal-muted'">
+                  <div class="text-terminal-purple font-bold mb-1">TS Service</div>
+                  <div class="text-[10px] text-terminal-muted">Tailnet service</div>
+                </button>
               </div>
             </div>
 
@@ -676,6 +682,89 @@
                   class="text-[10px] text-terminal-muted mt-2">
                   ID: <span class="text-terminal-cyan" x-text="formData.tailscale_device_id"></span>
                 </div>
+              </div>
+              <div x-show="!settings.tailscale_api_key || !settings.tailscale_tailnet"
+                class="p-3 bg-terminal-yellow/10 border border-terminal-yellow/30 rounded text-[10px] text-terminal-yellow">
+                Configure Tailscale API credentials in Settings before using this check type
+              </div>
+            </div>
+
+            <!-- Tailscale Service Fields -->
+            <div x-show="formData.type === 'tailscale_service'"
+              x-init="$watch('formData.type', val => val === 'tailscale_service' && loadTailscaleDevices())"
+              class="space-y-6 mb-8 p-6 bg-terminal-surface border border-terminal-border rounded-lg">
+              <div class="text-xs text-terminal-purple uppercase tracking-widest mb-4">Tailscale Service Configuration
+              </div>
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest">Device /
+                    Hostname</label>
+                  <button type="button" @click="loadTailscaleDevices()" :disabled="loadingTailscaleDevices"
+                    class="text-[10px] text-terminal-cyan hover:text-terminal-green disabled:opacity-50 flex items-center gap-1">
+                    <template x-if="loadingTailscaleDevices"><svg class="animate-spin w-3 h-3" fill="none"
+                        viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                        </circle>
+                        <path class="opacity-75" fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                        </path>
+                      </svg></template>
+                    <span x-text="loadingTailscaleDevices ? 'Loading...' : '↻ Refresh'"></span>
+                  </button>
+                </div>
+                <template x-if="tailscaleDevices.length > 0">
+                  <select x-model="formData.tailscale_service_host" :required="formData.type === 'tailscale_service'"
+                    class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono">
+                    <option value="">Select a device...</option>
+                    <template x-for="device in tailscaleDevices" :key="device.id">
+                      <option :value="device.hostname"
+                        x-text="`${device.hostname || device.name} (${device.addresses[0] || 'no IP'}) - ${device.online ? '🟢 Online' : '🔴 Offline'}`">
+                      </option>
+                    </template>
+                  </select>
+                </template>
+                <template x-if="tailscaleDevices.length === 0 && !loadingTailscaleDevices">
+                  <div>
+                    <input type="text" x-model="formData.tailscale_service_host"
+                      :required="formData.type === 'tailscale_service'"
+                      class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
+                      placeholder="Device hostname (configure Tailscale in Settings first)">
+                  </div>
+                </template>
+              </div>
+              <div class="grid md:grid-cols-3 gap-4">
+                <div>
+                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Protocol</label>
+                  <select x-model="formData.tailscale_service_protocol"
+                    class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono">
+                    <option value="http">HTTP</option>
+                    <option value="https">HTTPS</option>
+                    <option value="tcp">TCP</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Port</label>
+                  <input type="number" x-model="formData.tailscale_service_port"
+                    :required="formData.type === 'tailscale_service'" min="1" max="65535"
+                    class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
+                    placeholder="80">
+                </div>
+                <div
+                  x-show="formData.tailscale_service_protocol === 'http' || formData.tailscale_service_protocol === 'https'">
+                  <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Path</label>
+                  <input type="text" x-model="formData.tailscale_service_path"
+                    class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
+                    placeholder="/">
+                </div>
+              </div>
+              <div
+                x-show="formData.tailscale_service_protocol === 'http' || formData.tailscale_service_protocol === 'https'">
+                <label class="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">Expected Status
+                  Codes</label>
+                <input type="text" x-model="expectedStatusCodesInput" @input="updateStatusCodesArray()"
+                  class="w-full bg-terminal-bg border border-terminal-border text-terminal-text px-4 py-3 rounded focus:border-terminal-green outline-none transition font-mono"
+                  placeholder="200, 201, 204">
+                <div class="text-[10px] text-terminal-muted mt-1">Comma-separated list (default: 200)</div>
               </div>
               <div x-show="!settings.tailscale_api_key || !settings.tailscale_tailnet"
                 class="p-3 bg-terminal-yellow/10 border border-terminal-yellow/30 rounded text-[10px] text-terminal-yellow">
@@ -994,7 +1083,8 @@
           method: 'GET', expected_status_codes: [200], json_path: '', expected_json_value: '',
           host: '', postgres_conn_string: '', postgres_query: '', expected_query_value: '',
           dns_hostname: '', dns_record_type: 'A', expected_dns_value: '', group_id: '', tag_ids: [],
-          tailscale_device_id: ''
+          tailscale_device_id: '', tailscale_service_host: '', tailscale_service_port: 80,
+          tailscale_service_protocol: 'http', tailscale_service_path: '/'
         },
         eventSource: null,
 
@@ -1248,6 +1338,7 @@
             case 'postgres': return 'PostgreSQL Database';
             case 'dns': return check.dns_hostname || 'N/A';
             case 'tailscale': return 'Device: ' + (check.tailscale_device_id || 'N/A');
+            case 'tailscale_service': return `${check.tailscale_service_host}:${check.tailscale_service_port || 'N/A'}`;
             default: return check.url || 'N/A';
           }
         },
@@ -1259,7 +1350,8 @@
             'postgres': 'bg-terminal-purple/20 text-terminal-purple',
             'json_http': 'bg-terminal-yellow/20 text-terminal-yellow',
             'dns': 'bg-terminal-green/20 text-terminal-green',
-            'tailscale': 'bg-terminal-cyan/20 text-terminal-cyan'
+            'tailscale': 'bg-terminal-cyan/20 text-terminal-cyan',
+            'tailscale_service': 'bg-terminal-purple/20 text-terminal-purple'
           };
           return classes[type] || classes['http'];
         },
@@ -1328,7 +1420,7 @@
         openAddModal() {
           this.editingCheck = null;
           this.expectedStatusCodesInput = '200';
-          this.formData = { name: '', type: 'http', url: '', interval_seconds: 60, timeout_seconds: 10, retries: 0, retry_delay_seconds: 5, enabled: true, method: 'GET', expected_status_codes: [200], json_path: '', expected_json_value: '', host: '', postgres_conn_string: '', postgres_query: '', expected_query_value: '', dns_hostname: '', dns_record_type: 'A', expected_dns_value: '', group_id: '', tag_ids: [], tailscale_device_id: '' };
+          this.formData = { name: '', type: 'http', url: '', interval_seconds: 60, timeout_seconds: 10, retries: 0, retry_delay_seconds: 5, enabled: true, method: 'GET', expected_status_codes: [200], json_path: '', expected_json_value: '', host: '', postgres_conn_string: '', postgres_query: '', expected_query_value: '', dns_hostname: '', dns_record_type: 'A', expected_dns_value: '', group_id: '', tag_ids: [], tailscale_device_id: '', tailscale_service_host: '', tailscale_service_port: 80, tailscale_service_protocol: 'http', tailscale_service_path: '/' };
           this.showAddModal = true;
         },
 
@@ -1341,7 +1433,9 @@
             method: check.method || 'GET', expected_status_codes: codes, json_path: check.json_path || '', expected_json_value: check.expected_json_value || '',
             host: check.host || '', postgres_conn_string: check.postgres_conn_string || '', postgres_query: check.postgres_query || '', expected_query_value: check.expected_query_value || '',
             dns_hostname: check.dns_hostname || '', dns_record_type: check.dns_record_type || 'A', expected_dns_value: check.expected_dns_value || '',
-            group_id: check.group_id || '', tag_ids: (check.tags || []).map(t => t.id), tailscale_device_id: check.tailscale_device_id || ''
+            group_id: check.group_id || '', tag_ids: (check.tags || []).map(t => t.id), tailscale_device_id: check.tailscale_device_id || '',
+            tailscale_service_host: check.tailscale_service_host || '', tailscale_service_port: check.tailscale_service_port || 80,
+            tailscale_service_protocol: check.tailscale_service_protocol || 'http', tailscale_service_path: check.tailscale_service_path || '/'
           };
           this.showAddModal = true;
         },
@@ -1352,6 +1446,9 @@
             const method = this.editingCheck ? 'PUT' : 'POST';
             const payload = { ...this.formData };
             payload.group_id = payload.group_id ? parseInt(payload.group_id) : null;
+            if (payload.tailscale_service_port) {
+              payload.tailscale_service_port = parseInt(payload.tailscale_service_port);
+            }
             const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             if (!response.ok) throw new Error('Failed to save check');
             this.closeModals();

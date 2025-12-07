@@ -81,12 +81,13 @@ func (f FlexibleInt) MarshalJSON() ([]byte, error) {
 }
 
 const (
-	CheckTypeHTTP      CheckType = "http"
-	CheckTypePing      CheckType = "ping"
-	CheckTypePostgres  CheckType = "postgres"
-	CheckTypeJSONHTTP  CheckType = "json_http"
-	CheckTypeDNS       CheckType = "dns"
-	CheckTypeTailscale CheckType = "tailscale"
+	CheckTypeHTTP             CheckType = "http"
+	CheckTypePing             CheckType = "ping"
+	CheckTypePostgres         CheckType = "postgres"
+	CheckTypeJSONHTTP         CheckType = "json_http"
+	CheckTypeDNS              CheckType = "dns"
+	CheckTypeTailscale        CheckType = "tailscale"
+	CheckTypeTailscaleService CheckType = "tailscale_service"
 )
 
 type Group struct {
@@ -139,6 +140,12 @@ type Check struct {
 
 	// Tailscale specific
 	TailscaleDeviceID string `json:"tailscale_device_id,omitempty"`
+
+	// Tailscale Service specific
+	TailscaleServiceHost     string `json:"tailscale_service_host,omitempty"`
+	TailscaleServicePort     int    `json:"tailscale_service_port,omitempty"`
+	TailscaleServiceProtocol string `json:"tailscale_service_protocol,omitempty"` // http, https, tcp
+	TailscaleServicePath     string `json:"tailscale_service_path,omitempty"`     // for http/https
 }
 
 type CheckHistory struct {
@@ -199,6 +206,10 @@ type CreateCheckRequest struct {
 	DNSRecordType       string        `json:"dns_record_type,omitempty"`
 	ExpectedDNSValue    string        `json:"expected_dns_value,omitempty"`
 	TailscaleDeviceID   string        `json:"tailscale_device_id,omitempty"`
+	TailscaleServiceHost     string   `json:"tailscale_service_host,omitempty"`
+	TailscaleServicePort     FlexibleInt `json:"tailscale_service_port,omitempty"`
+	TailscaleServiceProtocol string   `json:"tailscale_service_protocol,omitempty"`
+	TailscaleServicePath     string   `json:"tailscale_service_path,omitempty"`
 }
 
 type UpdateCheckRequest struct {
@@ -224,6 +235,10 @@ type UpdateCheckRequest struct {
 	DNSRecordType       *string       `json:"dns_record_type,omitempty"`
 	ExpectedDNSValue    *string       `json:"expected_dns_value,omitempty"`
 	TailscaleDeviceID   *string       `json:"tailscale_device_id,omitempty"`
+	TailscaleServiceHost     *string  `json:"tailscale_service_host,omitempty"`
+	TailscaleServicePort     FlexibleInt `json:"tailscale_service_port,omitempty"`
+	TailscaleServiceProtocol *string  `json:"tailscale_service_protocol,omitempty"`
+	TailscaleServicePath     *string  `json:"tailscale_service_path,omitempty"`
 }
 
 type CreateGroupRequest struct {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -62,19 +63,18 @@ func (h *Handlers) GetChecks(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	
+
 	// Determine aggregation strategy based on time range
-	var history []models.CheckHistory
 	var historyLimit int
 	var bucketMinutes int
-	
+
 	if since == nil {
 		// No range specified, use recent raw data
 		historyLimit = 50
 	} else {
 		// Calculate time range duration
 		duration := time.Since(*since)
-		
+
 		if duration <= 1*time.Hour {
 			// For ranges <= 1 hour, use raw data
 			historyLimit = 500
@@ -102,8 +102,9 @@ func (h *Handlers) GetChecks(w http.ResponseWriter, r *http.Request) {
 
 	var checksWithStatus []models.CheckWithStatus
 	for _, check := range checks {
+		var history []models.CheckHistory
 		lastStatus, _ := h.db.GetLastStatus(check.ID)
-		
+
 		// Use aggregated or raw history based on time range
 		if bucketMinutes > 0 {
 			history, _ = h.db.GetCheckHistoryAggregated(check.ID, since, bucketMinutes, historyLimit)
@@ -169,27 +170,31 @@ func (h *Handlers) CreateCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	check := models.Check{
-		Name:                req.Name,
-		Type:                req.Type,
-		URL:                 req.URL,
-		IntervalSeconds:     intervalSeconds,
-		TimeoutSeconds:      timeoutSeconds,
-		Retries:             retries,
-		RetryDelaySeconds:   retryDelaySeconds,
-		Enabled:             req.Enabled,
-		GroupID:             req.GroupID.Value,
-		ExpectedStatusCodes: req.ExpectedStatusCodes,
-		Method:              req.Method,
-		JSONPath:            req.JSONPath,
-		ExpectedJSONValue:   req.ExpectedJSONValue,
-		PostgresConnString:  req.PostgresConnString,
-		PostgresQuery:       req.PostgresQuery,
-		ExpectedQueryValue:  req.ExpectedQueryValue,
-		Host:                req.Host,
-		DNSHostname:         req.DNSHostname,
-		DNSRecordType:       req.DNSRecordType,
-		ExpectedDNSValue:    req.ExpectedDNSValue,
-		TailscaleDeviceID:   req.TailscaleDeviceID,
+		Name:                     req.Name,
+		Type:                     req.Type,
+		URL:                      req.URL,
+		IntervalSeconds:          intervalSeconds,
+		TimeoutSeconds:           timeoutSeconds,
+		Retries:                  retries,
+		RetryDelaySeconds:        retryDelaySeconds,
+		Enabled:                  req.Enabled,
+		GroupID:                  req.GroupID.Value,
+		ExpectedStatusCodes:      req.ExpectedStatusCodes,
+		Method:                   req.Method,
+		JSONPath:                 req.JSONPath,
+		ExpectedJSONValue:        req.ExpectedJSONValue,
+		PostgresConnString:       req.PostgresConnString,
+		PostgresQuery:            req.PostgresQuery,
+		ExpectedQueryValue:       req.ExpectedQueryValue,
+		Host:                     req.Host,
+		DNSHostname:              req.DNSHostname,
+		DNSRecordType:            req.DNSRecordType,
+		ExpectedDNSValue:         req.ExpectedDNSValue,
+		TailscaleDeviceID:        req.TailscaleDeviceID,
+		TailscaleServiceHost:     req.TailscaleServiceHost,
+		TailscaleServicePort:     req.TailscaleServicePort.Value,
+		TailscaleServiceProtocol: req.TailscaleServiceProtocol,
+		TailscaleServicePath:     req.TailscaleServicePath,
 	}
 
 	if check.Method == "" {
@@ -318,6 +323,18 @@ func (h *Handlers) UpdateCheck(w http.ResponseWriter, r *http.Request) {
 	if req.TailscaleDeviceID != nil {
 		check.TailscaleDeviceID = *req.TailscaleDeviceID
 	}
+	if req.TailscaleServiceHost != nil {
+		check.TailscaleServiceHost = *req.TailscaleServiceHost
+	}
+	if req.TailscaleServicePort.Set {
+		check.TailscaleServicePort = req.TailscaleServicePort.Value
+	}
+	if req.TailscaleServiceProtocol != nil {
+		check.TailscaleServiceProtocol = *req.TailscaleServiceProtocol
+	}
+	if req.TailscaleServicePath != nil {
+		check.TailscaleServicePath = *req.TailscaleServicePath
+	}
 
 	if err := h.db.UpdateCheck(check); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -374,11 +391,11 @@ func (h *Handlers) GetCheckHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var history []models.CheckHistory
-	
+
 	// Determine aggregation strategy based on time range
 	if since != nil {
 		duration := time.Since(*since)
-		
+
 		if duration <= 1*time.Hour {
 			// For ranges <= 1 hour, use raw data
 			history, err = h.db.GetCheckHistory(id, since, limit)
@@ -395,7 +412,7 @@ func (h *Handlers) GetCheckHistory(w http.ResponseWriter, r *http.Request) {
 	} else {
 		history, err = h.db.GetCheckHistory(id, since, limit)
 	}
-	
+
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -821,12 +838,11 @@ func (h *Handlers) GetGroupedChecks(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	
+
 	// Determine aggregation strategy based on time range
-	var history []models.CheckHistory
 	var historyLimit int
 	var bucketMinutes int
-	
+
 	if since == nil {
 		// No range specified, use recent raw data
 		historyLimit = 200
@@ -834,7 +850,7 @@ func (h *Handlers) GetGroupedChecks(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Calculate time range duration
 		duration := time.Since(*since)
-		
+
 		if duration <= 15*time.Minute {
 			// For 15m range, fetch plenty of raw data
 			historyLimit = 200
@@ -889,15 +905,67 @@ func (h *Handlers) GetGroupedChecks(w http.ResponseWriter, r *http.Request) {
 		IsUp:   true,
 	}
 
+	// Fetch last statuses and histories concurrently to avoid N+1 latency
+	lastStatusMap := make(map[int64]*models.CheckHistory)
+	historyMap := make(map[int64][]models.CheckHistory)
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var firstErr error
+
+	// Limit concurrent DB calls to avoid exhausting connections
+	maxWorkers := 8
+	sem := make(chan struct{}, maxWorkers)
+
 	for _, check := range checks {
-		lastStatus, _ := h.db.GetLastStatus(check.ID)
-		
-		// Use aggregated or raw history based on time range
-		if bucketMinutes > 0 {
-			history, _ = h.db.GetCheckHistoryAggregated(check.ID, since, bucketMinutes, historyLimit)
-		} else {
-			history, _ = h.db.GetCheckHistory(check.ID, since, historyLimit)
-		}
+		wg.Add(1)
+		sem <- struct{}{}
+		c := check
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			lastStatus, err := h.db.GetLastStatus(c.ID)
+			if err != nil {
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = err
+				}
+				mu.Unlock()
+				return
+			}
+
+			var history []models.CheckHistory
+			if bucketMinutes > 0 {
+				history, err = h.db.GetCheckHistoryAggregated(c.ID, since, bucketMinutes, historyLimit)
+			} else {
+				history, err = h.db.GetCheckHistory(c.ID, since, historyLimit)
+			}
+			if err != nil {
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = err
+				}
+				mu.Unlock()
+				return
+			}
+
+			mu.Lock()
+			lastStatusMap[c.ID] = lastStatus
+			historyMap[c.ID] = history
+			mu.Unlock()
+		}()
+	}
+
+	wg.Wait()
+	if firstErr != nil {
+		http.Error(w, firstErr.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	for _, check := range checks {
+		lastStatus := lastStatusMap[check.ID]
+		history := historyMap[check.ID]
 
 		cws := models.CheckWithStatus{
 			Check:      check,
@@ -959,8 +1027,6 @@ func (h *Handlers) GetGroupedChecks(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
 }
-
-
 
 func (h *Handlers) StreamCheckUpdates(w http.ResponseWriter, r *http.Request) {
 	// Set SSE headers

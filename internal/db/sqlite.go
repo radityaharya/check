@@ -64,6 +64,10 @@ func (d *SQLiteDB) initSchema() error {
 		dns_record_type TEXT,
 		expected_dns_value TEXT,
 		tailscale_device_id TEXT,
+		tailscale_service_host TEXT,
+		tailscale_service_port INTEGER,
+		tailscale_service_protocol TEXT,
+		tailscale_service_path TEXT,
 		group_id INTEGER REFERENCES groups(id) ON DELETE SET NULL
 	);`
 
@@ -165,6 +169,10 @@ func (d *SQLiteDB) migrateSchema() {
 		{"expected_dns_value", "NULL"},
 		{"group_id", "NULL"},
 		{"tailscale_device_id", "NULL"},
+		{"tailscale_service_host", "NULL"},
+		{"tailscale_service_port", "NULL"},
+		{"tailscale_service_protocol", "NULL"},
+		{"tailscale_service_path", "NULL"},
 		{"retries", "0"},
 		{"retry_delay_seconds", "5"},
 	}
@@ -207,7 +215,8 @@ func (d *SQLiteDB) GetAllChecks() ([]models.Check, error) {
 		SELECT id, name, COALESCE(type, 'http'), COALESCE(url, ''), interval_seconds, timeout_seconds, COALESCE(retries, 0), COALESCE(retry_delay_seconds, 5), enabled, created_at,
 			COALESCE(expected_status_codes, '[200]'), COALESCE(method, 'GET'), COALESCE(json_path, ''), COALESCE(expected_json_value, ''),
 			COALESCE(postgres_conn_string, ''), COALESCE(postgres_query, ''), COALESCE(expected_query_value, ''), COALESCE(host, ''),
-			COALESCE(dns_hostname, ''), COALESCE(dns_record_type, ''), COALESCE(expected_dns_value, ''), group_id, COALESCE(tailscale_device_id, '')
+			COALESCE(dns_hostname, ''), COALESCE(dns_record_type, ''), COALESCE(expected_dns_value, ''), group_id, COALESCE(tailscale_device_id, ''),
+			COALESCE(tailscale_service_host, ''), COALESCE(tailscale_service_port, 0), COALESCE(tailscale_service_protocol, ''), COALESCE(tailscale_service_path, '')
 		FROM checks
 		ORDER BY created_at DESC
 	`)
@@ -224,7 +233,8 @@ func (d *SQLiteDB) GetAllChecks() ([]models.Check, error) {
 		if err := rows.Scan(&c.ID, &c.Name, &c.Type, &c.URL, &c.IntervalSeconds, &c.TimeoutSeconds, &c.Retries, &c.RetryDelaySeconds, &c.Enabled, &c.CreatedAt,
 			&statusCodesJSON, &c.Method, &c.JSONPath, &c.ExpectedJSONValue,
 			&c.PostgresConnString, &c.PostgresQuery, &c.ExpectedQueryValue, &c.Host,
-			&c.DNSHostname, &c.DNSRecordType, &c.ExpectedDNSValue, &groupID, &c.TailscaleDeviceID); err != nil {
+			&c.DNSHostname, &c.DNSRecordType, &c.ExpectedDNSValue, &groupID, &c.TailscaleDeviceID,
+			&c.TailscaleServiceHost, &c.TailscaleServicePort, &c.TailscaleServiceProtocol, &c.TailscaleServicePath); err != nil {
 			return nil, err
 		}
 		c.ExpectedStatusCodes = d.parseStatusCodes(statusCodesJSON)
@@ -246,13 +256,15 @@ func (d *SQLiteDB) GetCheck(id int64) (*models.Check, error) {
 		SELECT id, name, COALESCE(type, 'http'), COALESCE(url, ''), interval_seconds, timeout_seconds, COALESCE(retries, 0), COALESCE(retry_delay_seconds, 5), enabled, created_at,
 			COALESCE(expected_status_codes, '[200]'), COALESCE(method, 'GET'), COALESCE(json_path, ''), COALESCE(expected_json_value, ''),
 			COALESCE(postgres_conn_string, ''), COALESCE(postgres_query, ''), COALESCE(expected_query_value, ''), COALESCE(host, ''),
-			COALESCE(dns_hostname, ''), COALESCE(dns_record_type, ''), COALESCE(expected_dns_value, ''), group_id, COALESCE(tailscale_device_id, '')
+			COALESCE(dns_hostname, ''), COALESCE(dns_record_type, ''), COALESCE(expected_dns_value, ''), group_id, COALESCE(tailscale_device_id, ''),
+			COALESCE(tailscale_service_host, ''), COALESCE(tailscale_service_port, 0), COALESCE(tailscale_service_protocol, ''), COALESCE(tailscale_service_path, '')
 		FROM checks
 		WHERE id = ?
 	`, id).Scan(&c.ID, &c.Name, &c.Type, &c.URL, &c.IntervalSeconds, &c.TimeoutSeconds, &c.Retries, &c.RetryDelaySeconds, &c.Enabled, &c.CreatedAt,
 		&statusCodesJSON, &c.Method, &c.JSONPath, &c.ExpectedJSONValue,
 		&c.PostgresConnString, &c.PostgresQuery, &c.ExpectedQueryValue, &c.Host,
-		&c.DNSHostname, &c.DNSRecordType, &c.ExpectedDNSValue, &groupID, &c.TailscaleDeviceID)
+		&c.DNSHostname, &c.DNSRecordType, &c.ExpectedDNSValue, &groupID, &c.TailscaleDeviceID,
+		&c.TailscaleServiceHost, &c.TailscaleServicePort, &c.TailscaleServiceProtocol, &c.TailscaleServicePath)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -275,12 +287,14 @@ func (d *SQLiteDB) CreateCheck(c *models.Check) error {
 		INSERT INTO checks (name, type, url, interval_seconds, timeout_seconds, retries, retry_delay_seconds, enabled,
 			expected_status_codes, method, json_path, expected_json_value,
 			postgres_conn_string, postgres_query, expected_query_value, host,
-			dns_hostname, dns_record_type, expected_dns_value, group_id, tailscale_device_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			dns_hostname, dns_record_type, expected_dns_value, group_id, tailscale_device_id,
+			tailscale_service_host, tailscale_service_port, tailscale_service_protocol, tailscale_service_path)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, c.Name, c.Type, c.URL, c.IntervalSeconds, c.TimeoutSeconds, c.Retries, c.RetryDelaySeconds, c.Enabled,
 		statusCodesJSON, c.Method, c.JSONPath, c.ExpectedJSONValue,
 		c.PostgresConnString, c.PostgresQuery, c.ExpectedQueryValue, c.Host,
-		c.DNSHostname, c.DNSRecordType, c.ExpectedDNSValue, c.GroupID, c.TailscaleDeviceID)
+		c.DNSHostname, c.DNSRecordType, c.ExpectedDNSValue, c.GroupID, c.TailscaleDeviceID,
+		c.TailscaleServiceHost, c.TailscaleServicePort, c.TailscaleServiceProtocol, c.TailscaleServicePath)
 	if err != nil {
 		return err
 	}
@@ -302,12 +316,14 @@ func (d *SQLiteDB) UpdateCheck(c *models.Check) error {
 		SET name = ?, type = ?, url = ?, interval_seconds = ?, timeout_seconds = ?, retries = ?, retry_delay_seconds = ?, enabled = ?,
 			expected_status_codes = ?, method = ?, json_path = ?, expected_json_value = ?,
 			postgres_conn_string = ?, postgres_query = ?, expected_query_value = ?, host = ?,
-			dns_hostname = ?, dns_record_type = ?, expected_dns_value = ?, group_id = ?, tailscale_device_id = ?
+			dns_hostname = ?, dns_record_type = ?, expected_dns_value = ?, group_id = ?, tailscale_device_id = ?,
+			tailscale_service_host = ?, tailscale_service_port = ?, tailscale_service_protocol = ?, tailscale_service_path = ?
 		WHERE id = ?
 	`, c.Name, c.Type, c.URL, c.IntervalSeconds, c.TimeoutSeconds, c.Retries, c.RetryDelaySeconds, c.Enabled,
 		statusCodesJSON, c.Method, c.JSONPath, c.ExpectedJSONValue,
 		c.PostgresConnString, c.PostgresQuery, c.ExpectedQueryValue, c.Host,
-		c.DNSHostname, c.DNSRecordType, c.ExpectedDNSValue, c.GroupID, c.TailscaleDeviceID, c.ID)
+		c.DNSHostname, c.DNSRecordType, c.ExpectedDNSValue, c.GroupID, c.TailscaleDeviceID,
+		c.TailscaleServiceHost, c.TailscaleServicePort, c.TailscaleServiceProtocol, c.TailscaleServicePath, c.ID)
 	return err
 }
 
@@ -321,7 +337,8 @@ func (d *SQLiteDB) GetEnabledChecks() ([]models.Check, error) {
 		SELECT id, name, COALESCE(type, 'http'), COALESCE(url, ''), interval_seconds, timeout_seconds, COALESCE(retries, 0), COALESCE(retry_delay_seconds, 5), enabled, created_at,
 			COALESCE(expected_status_codes, '[200]'), COALESCE(method, 'GET'), COALESCE(json_path, ''), COALESCE(expected_json_value, ''),
 			COALESCE(postgres_conn_string, ''), COALESCE(postgres_query, ''), COALESCE(expected_query_value, ''), COALESCE(host, ''),
-			COALESCE(dns_hostname, ''), COALESCE(dns_record_type, ''), COALESCE(expected_dns_value, ''), group_id, COALESCE(tailscale_device_id, '')
+			COALESCE(dns_hostname, ''), COALESCE(dns_record_type, ''), COALESCE(expected_dns_value, ''), group_id, COALESCE(tailscale_device_id, ''),
+			COALESCE(tailscale_service_host, ''), COALESCE(tailscale_service_port, 0), COALESCE(tailscale_service_protocol, ''), COALESCE(tailscale_service_path, '')
 		FROM checks
 		WHERE enabled = 1
 	`)
@@ -338,7 +355,8 @@ func (d *SQLiteDB) GetEnabledChecks() ([]models.Check, error) {
 		if err := rows.Scan(&c.ID, &c.Name, &c.Type, &c.URL, &c.IntervalSeconds, &c.TimeoutSeconds, &c.Retries, &c.RetryDelaySeconds, &c.Enabled, &c.CreatedAt,
 			&statusCodesJSON, &c.Method, &c.JSONPath, &c.ExpectedJSONValue,
 			&c.PostgresConnString, &c.PostgresQuery, &c.ExpectedQueryValue, &c.Host,
-			&c.DNSHostname, &c.DNSRecordType, &c.ExpectedDNSValue, &groupID, &c.TailscaleDeviceID); err != nil {
+			&c.DNSHostname, &c.DNSRecordType, &c.ExpectedDNSValue, &groupID, &c.TailscaleDeviceID,
+			&c.TailscaleServiceHost, &c.TailscaleServicePort, &c.TailscaleServiceProtocol, &c.TailscaleServicePath); err != nil {
 			return nil, err
 		}
 		c.ExpectedStatusCodes = d.parseStatusCodes(statusCodesJSON)
