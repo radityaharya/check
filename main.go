@@ -98,6 +98,7 @@ func main() {
 	router.HandleFunc("/api/checks/{id}", handlers.DeleteCheck).Methods("DELETE")
 	router.HandleFunc("/api/checks/{id}/history", handlers.GetCheckHistory).Methods("GET")
 	router.HandleFunc("/api/checks/grouped", handlers.GetGroupedChecks).Methods("GET")
+	router.HandleFunc("/api/stream/updates", handlers.StreamCheckUpdates).Methods("GET")
 	router.HandleFunc("/api/stats", handlers.GetStats).Methods("GET")
 	router.HandleFunc("/api/settings", handlers.GetSettings).Methods("GET")
 	router.HandleFunc("/api/settings", handlers.UpdateSettings).Methods("PUT")

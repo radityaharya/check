@@ -62,9 +62,36 @@ func (h *Handlers) GetChecks(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	historyLimit := 50
-	if since != nil {
-		historyLimit = 500
+	
+	// Determine aggregation strategy based on time range
+	var history []models.CheckHistory
+	var historyLimit int
+	var bucketMinutes int
+	
+	if since == nil {
+		// No range specified, use recent raw data
+		historyLimit = 50
+	} else {
+		// Calculate time range duration
+		duration := time.Since(*since)
+		
+		if duration <= 1*time.Hour {
+			// For ranges <= 1 hour, use raw data
+			historyLimit = 500
+			bucketMinutes = 0
+		} else if duration <= 24*time.Hour {
+			// For ranges <= 1 day, aggregate by 5-minute buckets
+			historyLimit = 288
+			bucketMinutes = 5
+		} else if duration <= 7*24*time.Hour {
+			// For ranges <= 7 days, aggregate by 1-hour buckets
+			historyLimit = 168
+			bucketMinutes = 60
+		} else {
+			// For ranges > 7 days, aggregate by 6-hour buckets
+			historyLimit = 120
+			bucketMinutes = 360
+		}
 	}
 
 	checks, err := h.db.GetAllChecks()
@@ -76,7 +103,13 @@ func (h *Handlers) GetChecks(w http.ResponseWriter, r *http.Request) {
 	var checksWithStatus []models.CheckWithStatus
 	for _, check := range checks {
 		lastStatus, _ := h.db.GetLastStatus(check.ID)
-		history, _ := h.db.GetCheckHistory(check.ID, since, historyLimit)
+		
+		// Use aggregated or raw history based on time range
+		if bucketMinutes > 0 {
+			history, _ = h.db.GetCheckHistoryAggregated(check.ID, since, bucketMinutes, historyLimit)
+		} else {
+			history, _ = h.db.GetCheckHistory(check.ID, since, historyLimit)
+		}
 
 		cws := models.CheckWithStatus{
 			Check:      check,
@@ -340,7 +373,29 @@ func (h *Handlers) GetCheckHistory(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	history, err := h.db.GetCheckHistory(id, since, limit)
+	var history []models.CheckHistory
+	
+	// Determine aggregation strategy based on time range
+	if since != nil {
+		duration := time.Since(*since)
+		
+		if duration <= 1*time.Hour {
+			// For ranges <= 1 hour, use raw data
+			history, err = h.db.GetCheckHistory(id, since, limit)
+		} else if duration <= 24*time.Hour {
+			// For ranges <= 1 day, aggregate by 5-minute buckets
+			history, err = h.db.GetCheckHistoryAggregated(id, since, 5, 288)
+		} else if duration <= 7*24*time.Hour {
+			// For ranges <= 7 days, aggregate by 1-hour buckets
+			history, err = h.db.GetCheckHistoryAggregated(id, since, 60, 168)
+		} else {
+			// For ranges > 7 days, aggregate by 6-hour buckets
+			history, err = h.db.GetCheckHistoryAggregated(id, since, 360, 120)
+		}
+	} else {
+		history, err = h.db.GetCheckHistory(id, since, limit)
+	}
+	
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -766,9 +821,45 @@ func (h *Handlers) GetGroupedChecks(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	historyLimit := 50
-	if since != nil {
-		historyLimit = 500
+	
+	// Determine aggregation strategy based on time range
+	var history []models.CheckHistory
+	var historyLimit int
+	var bucketMinutes int
+	
+	if since == nil {
+		// No range specified, use recent raw data
+		historyLimit = 200
+		bucketMinutes = 0
+	} else {
+		// Calculate time range duration
+		duration := time.Since(*since)
+		
+		if duration <= 15*time.Minute {
+			// For 15m range, fetch plenty of raw data
+			historyLimit = 200
+			bucketMinutes = 0
+		} else if duration <= 30*time.Minute {
+			// For 30m range, fetch plenty of raw data
+			historyLimit = 300
+			bucketMinutes = 0
+		} else if duration <= 1*time.Hour {
+			// For 1h range, fetch plenty of raw data
+			historyLimit = 500
+			bucketMinutes = 0
+		} else if duration <= 24*time.Hour {
+			// For 1d range, use all raw data (no aggregation)
+			historyLimit = 2000
+			bucketMinutes = 0
+		} else if duration <= 7*24*time.Hour {
+			// For 7d range, aggregate by 30-minute buckets
+			historyLimit = 336 // 7 days * 48 (30-min buckets per day)
+			bucketMinutes = 30
+		} else {
+			// For ranges > 7 days (30d), aggregate by 2-hour buckets
+			historyLimit = 360 // 30 days * 12 (2-hour buckets per day)
+			bucketMinutes = 120
+		}
 	}
 
 	checks, err := h.db.GetAllChecks()
@@ -800,7 +891,13 @@ func (h *Handlers) GetGroupedChecks(w http.ResponseWriter, r *http.Request) {
 
 	for _, check := range checks {
 		lastStatus, _ := h.db.GetLastStatus(check.ID)
-		history, _ := h.db.GetCheckHistory(check.ID, since, historyLimit)
+		
+		// Use aggregated or raw history based on time range
+		if bucketMinutes > 0 {
+			history, _ = h.db.GetCheckHistoryAggregated(check.ID, since, bucketMinutes, historyLimit)
+		} else {
+			history, _ = h.db.GetCheckHistory(check.ID, since, historyLimit)
+		}
 
 		cws := models.CheckWithStatus{
 			Check:      check,
@@ -861,4 +958,45 @@ func (h *Handlers) GetGroupedChecks(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
+}
+
+
+
+func (h *Handlers) StreamCheckUpdates(w http.ResponseWriter, r *http.Request) {
+	// Set SSE headers
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	// Subscribe to check updates
+	client := h.engine.Subscribe()
+	defer h.engine.Unsubscribe(client)
+
+	// Get flusher for sending data
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	// Send initial connection event
+	fmt.Fprintf(w, "event: connected\ndata: {\"message\":\"connected\"}\n\n")
+	flusher.Flush()
+
+	// Stream updates
+	for {
+		select {
+		case event := <-client:
+			data, err := json.Marshal(event)
+			if err != nil {
+				continue
+			}
+			fmt.Fprintf(w, "event: check_update\ndata: %s\n\n", data)
+			flusher.Flush()
+		case <-r.Context().Done():
+			// Client disconnected
+			return
+		}
+	}
 }

@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Uptime Monitor</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.x.x/dist/cdn.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -954,7 +955,7 @@
         groupedChecks: [],
         groups: [],
         tags: [],
-        stats: null,
+        stats: { total_checks: 0, active_checks: 0, up_checks: 0, total_uptime: 0 },
         loadingChecks: true,
         hasLoaded: false,
         showAddModal: false,
@@ -972,7 +973,7 @@
         isLive: true,
         expandedChecks: [],
         expandedGroups: [],
-        timeRange: '1d',
+        timeRange: localStorage.getItem('gocheck_timeRange') || '1d',
         ranges: ['15m', '30m', '60m', '1d', '30d'],
         settings: { discord_webhook_url: '', gotify_server_url: '', gotify_token: '', tailscale_api_key: '', tailscale_tailnet: '' },
         testingWebhook: false,
@@ -995,11 +996,109 @@
           dns_hostname: '', dns_record_type: 'A', expected_dns_value: '', group_id: '', tag_ids: [],
           tailscale_device_id: ''
         },
+        eventSource: null,
 
         async init() {
           await Promise.all([this.loadData(), this.loadSettings(), this.loadGroups(), this.loadTags()]);
           this.expandedGroups = this.groupedChecks.map(g => g.id);
-          setInterval(() => this.loadData(), 5000);
+          this.connectSSE();
+          // Refresh stats every 60 seconds
+          setInterval(() => this.loadStats(), 60000);
+        },
+
+        connectSSE() {
+          if (this.eventSource) {
+            this.eventSource.close();
+          }
+
+          this.eventSource = new EventSource('/api/stream/updates');
+
+          this.eventSource.addEventListener('connected', (e) => {
+            console.log('SSE connected');
+            this.isLive = true;
+          });
+
+          this.eventSource.addEventListener('check_update', (e) => {
+            const update = JSON.parse(e.data);
+            this.handleCheckUpdate(update);
+          });
+
+          this.eventSource.onerror = (error) => {
+            console.error('SSE error:', error);
+            this.isLive = false;
+            this.eventSource.close();
+            // Reconnect after 5 seconds
+            setTimeout(() => this.connectSSE(), 5000);
+          };
+        },
+
+        handleCheckUpdate(update) {
+          console.log('Received check update:', update.check_id, update.is_up ? '✓' : '✗');
+
+          // Update the check in groupedChecks
+          for (let group of this.groupedChecks) {
+            if (!group.checks || !Array.isArray(group.checks)) continue;
+
+            const checkIndex = group.checks.findIndex(c => c && c.check && c.check.id === update.check_id);
+            if (checkIndex !== -1) {
+              // Update the check data
+              group.checks[checkIndex].last_status = update.last_status;
+              group.checks[checkIndex].is_up = update.is_up;
+              group.checks[checkIndex].last_checked_at = update.last_checked_at;
+
+              // Update history - prepend new result and keep limited
+              if (!group.checks[checkIndex].history) {
+                group.checks[checkIndex].history = [];
+              }
+              group.checks[checkIndex].history.unshift(update.last_status);
+              group.checks[checkIndex].history = group.checks[checkIndex].history.slice(0, 500);
+
+              // Update chart if this check is being viewed
+              if (this.selectedCheck && this.selectedCheck.check && this.selectedCheck.check.id === update.check_id) {
+                this.selectedCheck = group.checks[checkIndex];
+                this.history = this.selectedCheck.history || [];
+                this.filteredHistory = this.history;
+                this.renderChart();
+              }
+
+              // Recalculate group status
+              this.updateGroupStatus(group);
+              break;
+            }
+          }
+
+          this.lastUpdated = new Date();
+          // Stats will be refreshed by the interval timer (every 60s)
+        },
+
+        updateGroupStatus(group) {
+          if (!group.checks || !Array.isArray(group.checks)) return;
+
+          group.is_up = true;
+          group.up_count = 0;
+          group.down_count = 0;
+          for (let check of group.checks) {
+            if (check && check.check && check.check.enabled) {
+              if (check.is_up) {
+                group.up_count++;
+              } else {
+                group.down_count++;
+                group.is_up = false;
+              }
+            }
+          }
+        },
+
+        async loadStats() {
+          try {
+            const qs = `?range=${encodeURIComponent(this.timeRange)}`;
+            const statsRes = await fetch('/api/stats' + qs);
+            this.stats = await statsRes.json();
+            this.isLive = true;
+          } catch (error) {
+            console.error('Failed to load stats:', error);
+            this.isLive = false;
+          }
         },
 
         async loadData() {
@@ -1007,9 +1106,19 @@
             const firstLoad = !this.hasLoaded;
             if (firstLoad) this.loadingChecks = true;
             const qs = `?range=${encodeURIComponent(this.timeRange)}`;
+            console.log('Loading data with range:', this.timeRange, 'query:', qs);
             const [groupedRes, statsRes] = await Promise.all([fetch('/api/checks/grouped' + qs), fetch('/api/stats' + qs)]);
+
+            if (!groupedRes.ok) {
+              throw new Error('Failed to fetch grouped checks: ' + groupedRes.statusText);
+            }
+            if (!statsRes.ok) {
+              throw new Error('Failed to fetch stats: ' + statsRes.statusText);
+            }
+
             this.groupedChecks = await groupedRes.json() || [];
             this.stats = await statsRes.json();
+            console.log('Loaded', this.groupedChecks.length, 'groups');
             this.lastUpdated = new Date();
             this.isLive = true;
             this.hasLoaded = true;
@@ -1124,6 +1233,7 @@
         setTimeRange(range) {
           if (this.timeRange === range) return;
           this.timeRange = range;
+          localStorage.setItem('gocheck_timeRange', range);
           this.loadData();
         },
 
@@ -1185,10 +1295,25 @@
           const limit = 40;
           const result = [];
           const data = history || [];
-          for (let i = 0; i < limit; i++) {
-            if (i < data.length) { result.unshift({ success: data[i].success, time: new Date(data[i].checked_at).toLocaleString(), empty: false }); }
-            else { result.unshift({ empty: true }); }
+
+          // If we have data, show the most recent 'limit' items
+          const dataToShow = data.slice(0, Math.min(limit, data.length));
+
+          // Fill empty slots at the beginning if we don't have enough data
+          const emptySlots = limit - dataToShow.length;
+          for (let i = 0; i < emptySlots; i++) {
+            result.push({ empty: true });
           }
+
+          // Add the actual data (most recent first, showing as oldest to newest left-to-right)
+          for (let i = dataToShow.length - 1; i >= 0; i--) {
+            result.push({
+              success: dataToShow[i].success,
+              time: new Date(dataToShow[i].checked_at).toLocaleString(),
+              empty: false
+            });
+          }
+
           return result;
         },
 

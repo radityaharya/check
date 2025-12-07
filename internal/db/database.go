@@ -15,10 +15,17 @@ type Database struct {
 }
 
 func NewDatabase(dbPath string) (*Database, error) {
-	db, err := sql.Open("sqlite3", dbPath+"?_foreign_keys=1")
+	dsn := dbPath + "?_foreign_keys=1&_journal_mode=WAL&_busy_timeout=5000"
+	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
+		return nil, err
 	}
+
+	// Configure connection pool for SQLite
+	// Allow multiple readers but serialize writes via WAL mode
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(0)
 
 	d := &Database{db: db}
 	if err := d.initSchema(); err != nil {
@@ -366,6 +373,52 @@ func (d *Database) GetCheckHistory(checkID int64, since *time.Time, limit int) (
 	}
 
 	query += " ORDER BY checked_at DESC"
+	if limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, limit)
+	}
+
+	rows, err := d.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var history []models.CheckHistory
+	for rows.Next() {
+		var h models.CheckHistory
+		if err := rows.Scan(&h.ID, &h.CheckID, &h.StatusCode, &h.ResponseTimeMs, &h.Success, &h.ErrorMessage, &h.CheckedAt); err != nil {
+			return nil, err
+		}
+		history = append(history, h)
+	}
+
+	return history, rows.Err()
+}
+
+func (d *Database) GetCheckHistoryAggregated(checkID int64, since *time.Time, bucketMinutes int, limit int) ([]models.CheckHistory, error) {
+	// Aggregate data into time buckets for large ranges
+	query := `
+		SELECT 
+			MAX(id) as id,
+			check_id,
+			CAST(AVG(status_code) AS INTEGER) as status_code,
+			CAST(AVG(response_time_ms) AS INTEGER) as response_time_ms,
+			MIN(CAST(success AS INTEGER)) as success,
+			'' as error_message,
+			datetime((strftime('%s', checked_at) / (? * 60)) * (? * 60), 'unixepoch') as checked_at
+		FROM check_history
+		WHERE check_id = ?`
+	args := []interface{}{bucketMinutes, bucketMinutes, checkID}
+
+	if since != nil {
+		query += " AND checked_at >= ?"
+		args = append(args, since.UTC().Format("2006-01-02 15:04:05"))
+	}
+
+	query += " GROUP BY datetime((strftime('%s', checked_at) / (? * 60)) * (? * 60), 'unixepoch') ORDER BY checked_at DESC"
+	args = append(args, bucketMinutes, bucketMinutes)
+
 	if limit > 0 {
 		query += " LIMIT ?"
 		args = append(args, limit)

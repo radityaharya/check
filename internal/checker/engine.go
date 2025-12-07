@@ -30,6 +30,17 @@ type Engine struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
+	broadcast chan *CheckResultEvent
+	clients   map[chan *CheckResultEvent]bool
+	clientsMu sync.RWMutex
+}
+
+type CheckResultEvent struct {
+	CheckID      int64                 `json:"check_id"`
+	Check        models.Check          `json:"check"`
+	LastStatus   *models.CheckHistory  `json:"last_status"`
+	IsUp         bool                  `json:"is_up"`
+	LastCheckedAt *time.Time           `json:"last_checked_at"`
 }
 
 type checkState struct {
@@ -41,13 +52,17 @@ type checkState struct {
 
 func NewEngine(database *db.Database, notifiers []notifier.Notifier) *Engine {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Engine{
+	e := &Engine{
 		db:        database,
 		notifiers: notifiers,
 		checks:    make(map[int64]*checkState),
 		ctx:       ctx,
 		cancel:    cancel,
+		broadcast: make(chan *CheckResultEvent, 100),
+		clients:   make(map[chan *CheckResultEvent]bool),
 	}
+	go e.broadcaster()
+	return e
 }
 
 func (e *Engine) Start() error {
@@ -218,6 +233,60 @@ func (e *Engine) performCheck(state *checkState) {
 	}
 
 	state.lastStatus = &history
+	
+	// Broadcast the result to SSE clients
+	e.broadcastCheckResult(check, &history)
+}
+
+func (e *Engine) broadcastCheckResult(check models.Check, history *models.CheckHistory) {
+	event := &CheckResultEvent{
+		CheckID:       check.ID,
+		Check:         check,
+		LastStatus:    history,
+		IsUp:          history.Success,
+		LastCheckedAt: &history.CheckedAt,
+	}
+	
+	// Non-blocking send
+	select {
+	case e.broadcast <- event:
+	default:
+		// Buffer full, skip this event
+	}
+}
+
+func (e *Engine) broadcaster() {
+	for {
+		select {
+		case event := <-e.broadcast:
+			e.clientsMu.RLock()
+			for client := range e.clients {
+				select {
+				case client <- event:
+				default:
+					// Client buffer full, skip
+				}
+			}
+			e.clientsMu.RUnlock()
+		case <-e.ctx.Done():
+			return
+		}
+	}
+}
+
+func (e *Engine) Subscribe() chan *CheckResultEvent {
+	client := make(chan *CheckResultEvent, 10)
+	e.clientsMu.Lock()
+	e.clients[client] = true
+	e.clientsMu.Unlock()
+	return client
+}
+
+func (e *Engine) Unsubscribe(client chan *CheckResultEvent) {
+	e.clientsMu.Lock()
+	delete(e.clients, client)
+	close(client)
+	e.clientsMu.Unlock()
 }
 
 func (e *Engine) getCheckTarget(check models.Check) string {
