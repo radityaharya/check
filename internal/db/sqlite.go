@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
 	"gocheck/internal/models"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 type SQLiteDB struct {
@@ -386,7 +387,7 @@ func (d *SQLiteDB) GetCheckHistory(checkID int64, since *time.Time, limit int) (
 
 	if since != nil {
 		query += " AND checked_at >= ?"
-		args = append(args, since.UTC().Format("2006-01-02 15:04:05"))
+		args = append(args, since.UTC().Format(time.RFC3339))
 	}
 
 	query += " ORDER BY checked_at DESC"
@@ -430,7 +431,7 @@ func (d *SQLiteDB) GetCheckHistoryAggregated(checkID int64, since *time.Time, bu
 
 	if since != nil {
 		query += " AND checked_at >= ?"
-		args = append(args, since.UTC().Format("2006-01-02 15:04:05"))
+		args = append(args, since.UTC().Format(time.RFC3339))
 	}
 
 	query += " GROUP BY datetime((strftime('%s', checked_at) / (? * 60)) * (? * 60), 'unixepoch') ORDER BY checked_at DESC"

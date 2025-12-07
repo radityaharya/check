@@ -326,8 +326,9 @@
                     <div x-show="expandedChecks.includes(check.id)" x-collapse
                       class="border-t border-terminal-border bg-terminal-bg/50">
                       <div class="p-5">
-                        <div class="h-24 w-full mb-4 relative"
-                          x-effect="if(expandedChecks.includes(check.id)) renderChart($el, check.history, check.is_up)">
+                        <div class="h-24 w-full mb-4 relative" :data-check-id="check.id"
+                          x-effect="if(expandedChecks.includes(check.id) && check.history) { renderChart($el, check.history, check.is_up); }"
+                          x-init="$watch('timeRange', () => { if(expandedChecks.includes(check.id)) { setTimeout(() => { const updatedCheck = groupedChecks.flatMap(g => g.checks || []).find(c => c.id === check.id); if(updatedCheck && updatedCheck.history) renderChart($el, updatedCheck.history, updatedCheck.is_up); }, 200); } });">
                           <canvas class="w-full h-full"></canvas>
                         </div>
                         <div class="flex justify-between items-center text-xs mb-3">
@@ -337,7 +338,7 @@
                         </div>
                         <div
                           class="flex gap-[2px] h-5 w-full rounded bg-terminal-border/50 mb-4 overflow-visible relative">
-                          <template x-for="(status, index) in getStatusBar(check.history)" :key="index">
+                          <template x-for="(status, index) in getStatusBar(check.history, check)" :key="index">
                             <div class="flex-1 h-full transition-all hover:opacity-70 cursor-pointer relative group/bar"
                               :class="status.success ? 'bg-terminal-green' : (status.empty ? 'bg-terminal-border' : 'bg-terminal-red')">
                               <div
@@ -350,6 +351,9 @@
                           </template>
                         </div>
                         <div class="flex gap-2">
+                          <button @click.stop="triggerCheckNow(check.id)"
+                            class="text-[10px] bg-terminal-green/20 hover:bg-terminal-green/30 text-terminal-green px-3 py-1.5 rounded uppercase tracking-wide"
+                            :disabled="!check.enabled">check now</button>
                           <button @click.stop="toggleCheckEnabled(check)"
                             class="text-[10px] px-3 py-1.5 rounded uppercase tracking-wide"
                             :class="check.enabled ? 'bg-terminal-yellow/20 hover:bg-terminal-yellow/30 text-terminal-yellow' : 'bg-terminal-green/20 hover:bg-terminal-green/30 text-terminal-green'"
@@ -1361,43 +1365,65 @@
           this.formData.expected_status_codes = codes.length > 0 ? codes : [200];
         },
 
+
         renderChart(container, history, isUp) {
-          if (!history || history.length === 0) return;
+          if (!history || history.length === 0) {
+            if (container.querySelector('canvas')?.chartInstance) {
+              container.querySelector('canvas').chartInstance.destroy();
+              container.querySelector('canvas').chartInstance = null;
+            }
+            return;
+          }
           const canvas = container.querySelector('canvas');
           const ctx = canvas.getContext('2d');
           const chartData = [...history].reverse();
-          const labels = chartData.map(h => new Date(h.checked_at).toLocaleString());
-          const dataPoints = chartData.map(h => h.response_time_ms);
+          const labels = chartData.map(h => {
+            try {
+              const date = new Date(h.checked_at);
+              if (isNaN(date.getTime())) return '';
+              return date.toLocaleString();
+            } catch (e) {
+              return '';
+            }
+          });
+          const dataPoints = chartData.map(h => h.response_time_ms || 0);
+
           if (canvas.chartInstance) {
-            canvas.chartInstance.data.labels = labels;
-            canvas.chartInstance.data.datasets[0].data = dataPoints;
-            canvas.chartInstance.data.datasets[0].borderColor = isUp ? '#c4a7e7' : '#f38ba8';
-            canvas.chartInstance.data.datasets[0].backgroundColor = isUp ? 'rgba(196,167,231,0.1)' : 'rgba(243,139,168,0.1)';
-            canvas.chartInstance.update('none');
-            return;
+            canvas.chartInstance.destroy();
+            canvas.chartInstance = null;
           }
+
           canvas.chartInstance = new Chart(ctx, {
             type: 'line',
             data: { labels, datasets: [{ data: dataPoints, borderColor: isUp ? '#c4a7e7' : '#f38ba8', borderWidth: 1.5, backgroundColor: isUp ? 'rgba(196,167,231,0.1)' : 'rgba(243,139,168,0.1)', fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 3 }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false, backgroundColor: '#12121a', titleColor: '#cdd6f4', bodyColor: '#cdd6f4', borderColor: '#1e1e2e', borderWidth: 1, callbacks: { title: items => items.map(i => labels[i.dataIndex]), label: ctx => `${ctx.parsed.y} ms` } } }, scales: { x: { display: false }, y: { display: false, beginAtZero: true } }, animation: { duration: 0 } }
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false, backgroundColor: '#12121a', titleColor: '#cdd6f4', bodyColor: '#cdd6f4', borderColor: '#1e1e2e', borderWidth: 1, callbacks: { title: function (items) { if (!items || items.length === 0) return ''; const index = items[0].dataIndex; const chartLabels = this.chart.data.labels; return chartLabels && chartLabels[index] ? chartLabels[index] : ''; }, label: ctx => `${ctx.parsed.y} ms` } } }, scales: { x: { display: false }, y: { display: false, beginAtZero: true } }, animation: { duration: 0 } }
           });
         },
 
-        getStatusBar(history) {
-          const limit = 40;
-          const result = [];
+        getStatusBar(history, check) {
           const data = history || [];
-
-          // If we have data, show the most recent 'limit' items
-          const dataToShow = data.slice(0, Math.min(limit, data.length));
-
-          // Fill empty slots at the beginning if we don't have enough data
-          const emptySlots = limit - dataToShow.length;
-          for (let i = 0; i < emptySlots; i++) {
-            result.push({ empty: true });
+          if (data.length === 0) {
+            return [];
           }
 
-          // Add the actual data (most recent first, showing as oldest to newest left-to-right)
+          let limit = 40;
+          const intervalSeconds = check?.interval_seconds || 60;
+
+          if (this.timeRange === '15m') {
+            limit = Math.min(15, Math.ceil(15 * 60 / intervalSeconds));
+          } else if (this.timeRange === '30m') {
+            limit = Math.min(30, Math.ceil(30 * 60 / intervalSeconds));
+          } else if (this.timeRange === '60m') {
+            limit = Math.min(60, Math.ceil(60 * 60 / intervalSeconds));
+          } else if (this.timeRange === '1d') {
+            limit = Math.min(96, Math.ceil(24 * 60 * 60 / intervalSeconds));
+          } else if (this.timeRange === '30d') {
+            limit = 40;
+          }
+
+          const dataToShow = data.slice(0, Math.min(limit, data.length));
+          const result = [];
+
           for (let i = dataToShow.length - 1; i >= 0; i--) {
             result.push({
               success: dataToShow[i].success,
@@ -1454,6 +1480,15 @@
             this.closeModals();
             await this.loadData();
           } catch (error) { alert('Failed to save check: ' + error.message); }
+        },
+
+        async triggerCheckNow(checkId) {
+          try {
+            const response = await fetch(`/api/checks/${checkId}/trigger`, {
+              method: 'POST'
+            });
+            if (!response.ok) throw new Error('Failed to trigger check');
+          } catch (error) { alert('Failed to trigger check: ' + error.message); }
         },
 
         async toggleCheckEnabled(check) {

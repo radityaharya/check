@@ -7,12 +7,13 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/gorilla/mux"
-	"gopkg.in/yaml.v3"
 	"gocheck/internal/api"
 	"gocheck/internal/checker"
 	"gocheck/internal/db"
 	"gocheck/internal/notifier"
+
+	"github.com/gorilla/mux"
+	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
@@ -114,6 +115,7 @@ func main() {
 	router.HandleFunc("/api/checks/{id}", handlers.UpdateCheck).Methods("PUT")
 	router.HandleFunc("/api/checks/{id}", handlers.DeleteCheck).Methods("DELETE")
 	router.HandleFunc("/api/checks/{id}/history", handlers.GetCheckHistory).Methods("GET")
+	router.HandleFunc("/api/checks/{id}/trigger", handlers.TriggerCheck).Methods("POST")
 	router.HandleFunc("/api/checks/grouped", handlers.GetGroupedChecks).Methods("GET")
 	router.HandleFunc("/api/stream/updates", handlers.StreamCheckUpdates).Methods("GET")
 	router.HandleFunc("/api/stats", handlers.GetStats).Methods("GET")

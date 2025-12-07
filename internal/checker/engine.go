@@ -280,6 +280,19 @@ func (e *Engine) Unsubscribe(client chan *CheckResultEvent) {
 	e.clientsMu.Unlock()
 }
 
+func (e *Engine) TriggerCheck(checkID int64) error {
+	e.mu.RLock()
+	state, exists := e.checks[checkID]
+	e.mu.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("check not found or not enabled")
+	}
+
+	go e.performCheck(state)
+	return nil
+}
+
 func (e *Engine) getCheckTarget(check models.Check) string {
 	switch check.Type {
 	case models.CheckTypePing:

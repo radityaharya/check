@@ -9,11 +9,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/mux"
 	"gocheck/internal/checker"
 	"gocheck/internal/db"
 	"gocheck/internal/models"
 	"gocheck/internal/notifier"
+
+	"github.com/gorilla/mux"
 	tailscale "tailscale.com/client/tailscale/v2"
 )
 
@@ -1026,6 +1027,23 @@ func (h *Handlers) GetGroupedChecks(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
+}
+
+func (h *Handlers) TriggerCheck(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseInt(vars["id"], 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.engine.TriggerCheck(id); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "Check triggered successfully"})
 }
 
 func (h *Handlers) StreamCheckUpdates(w http.ResponseWriter, r *http.Request) {

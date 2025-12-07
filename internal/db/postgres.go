@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	_ "github.com/lib/pq"
 	"gocheck/internal/models"
+
+	_ "github.com/lib/pq"
 )
 
 type PostgresDB struct {
@@ -379,7 +380,7 @@ func (d *PostgresDB) GetCheckHistory(checkID int64, since *time.Time, limit int)
 
 	if since != nil {
 		query += " AND checked_at >= $2"
-		args = append(args, since)
+		args = append(args, since.UTC())
 	}
 
 	query += " ORDER BY checked_at DESC"
@@ -423,7 +424,7 @@ func (d *PostgresDB) GetCheckHistoryAggregated(checkID int64, since *time.Time, 
 
 	if since != nil {
 		query += " AND checked_at >= $3"
-		args = append(args, since)
+		args = append(args, since.UTC())
 	}
 
 	query += " GROUP BY check_id, date_trunc('minute', checked_at - INTERVAL '0 minute' * (EXTRACT(MINUTE FROM checked_at)::INTEGER % $1)) ORDER BY checked_at DESC"
