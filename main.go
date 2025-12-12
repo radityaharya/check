@@ -12,6 +12,7 @@ import (
 	"gocheck/internal/checker"
 	"gocheck/internal/db"
 	"gocheck/internal/notifier"
+	"gocheck/internal/snapshot"
 
 	"github.com/gorilla/mux"
 	"gopkg.in/yaml.v3"
@@ -29,7 +30,7 @@ type Config struct {
 
 func loadConfig() (*Config, error) {
 	var config Config
-	
+
 	configPath := "config.yaml"
 	if envPath := os.Getenv("CONFIG_PATH"); envPath != "" {
 		configPath = envPath
@@ -73,7 +74,8 @@ func main() {
 	}
 
 	// Ensure data directory exists
-	if err := os.MkdirAll("./data", 0755); err != nil {
+	dataDir := "./data"
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		log.Fatalf("Failed to create data directory: %v", err)
 	}
 
@@ -118,7 +120,11 @@ func main() {
 	}
 	defer engine.Stop()
 
-	handlers := api.NewHandlers(database, engine, notifiers)
+	snapshotService := snapshot.NewService(database, engine, dataDir)
+	snapshotService.Start()
+	defer snapshotService.Stop()
+
+	handlers := api.NewHandlers(database, engine, notifiers, snapshotService, dataDir)
 	authManager := auth.NewAuthManager(database)
 
 	rpID := os.Getenv("WEBAUTHN_RP_ID")
@@ -165,6 +171,9 @@ func main() {
 	router.HandleFunc("/api/checks/{id}", authManager.OptionalAuth(handlers.UpdateCheck)).Methods("PUT")
 	router.HandleFunc("/api/checks/{id}", authManager.OptionalAuth(handlers.DeleteCheck)).Methods("DELETE")
 	router.HandleFunc("/api/checks/{id}/history", authManager.OptionalAuth(handlers.GetCheckHistory)).Methods("GET")
+	router.HandleFunc("/api/checks/{id}/snapshot", authManager.OptionalAuth(handlers.GetCheckSnapshot)).Methods("GET")
+	router.HandleFunc("/api/checks/{id}/snapshot/image", authManager.OptionalAuth(handlers.GetCheckSnapshotImage)).Methods("GET")
+	router.HandleFunc("/api/checks/{id}/snapshot/trigger", authManager.OptionalAuth(handlers.TriggerCheckSnapshot)).Methods("POST")
 	router.HandleFunc("/api/checks/{id}/trigger", authManager.OptionalAuth(handlers.TriggerCheck)).Methods("POST")
 	router.HandleFunc("/api/checks/grouped", authManager.OptionalAuth(handlers.GetGroupedChecks)).Methods("GET")
 	router.HandleFunc("/api/stream/updates", authManager.OptionalAuth(handlers.StreamCheckUpdates)).Methods("GET")
@@ -190,7 +199,7 @@ func main() {
 	if _, err := os.Stat(webDir); os.IsNotExist(err) {
 		webDir = "./web" // Fallback for development
 	}
-	
+
 	// SPA fallback - serve index.html for any non-API, non-file routes
 	fs := http.FileServer(http.Dir(webDir))
 	router.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

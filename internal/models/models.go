@@ -146,6 +146,11 @@ type Check struct {
 	TailscaleServicePort     int    `json:"tailscale_service_port,omitempty"`
 	TailscaleServiceProtocol string `json:"tailscale_service_protocol,omitempty"` // http, https, tcp
 	TailscaleServicePath     string `json:"tailscale_service_path,omitempty"`     // for http/https
+
+	// Snapshot metadata
+	SnapshotURL     string     `json:"snapshot_url,omitempty"`
+	SnapshotTakenAt *time.Time `json:"snapshot_taken_at,omitempty"`
+	SnapshotError   string     `json:"snapshot_error,omitempty"`
 }
 
 type CheckHistory struct {
@@ -267,6 +272,15 @@ type Settings struct {
 	GotifyToken       string `json:"gotify_token"`
 	TailscaleAPIKey   string `json:"tailscale_api_key"`
 	TailscaleTailnet  string `json:"tailscale_tailnet"`
+	CloudflareAccountID string `json:"cloudflare_account_id"`
+	CloudflareAPIToken  string `json:"cloudflare_api_token"`
+}
+
+type CheckSnapshot struct {
+	CheckID    int64      `json:"check_id"`
+	FilePath   string     `json:"file_path,omitempty"`
+	TakenAt    *time.Time `json:"taken_at,omitempty"`
+	LastError  string     `json:"last_error,omitempty"`
 }
 
 type User struct {

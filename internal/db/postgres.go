@@ -121,6 +121,14 @@ func (d *PostgresDB) initSchema() error {
 		value TEXT
 	);
 
+	-- Check snapshots table
+	CREATE TABLE IF NOT EXISTS check_snapshots (
+		check_id BIGINT PRIMARY KEY REFERENCES checks(id) ON DELETE CASCADE,
+		file_path TEXT,
+		taken_at TIMESTAMP WITH TIME ZONE,
+		last_error TEXT
+	);
+
 	-- Users table
 	CREATE TABLE IF NOT EXISTS users (
 		id BIGSERIAL PRIMARY KEY,
@@ -252,16 +260,18 @@ func (d *PostgresDB) encodeStatusCodes(codes []int) []byte {
 
 func (d *PostgresDB) GetAllChecks() ([]models.Check, error) {
 	rows, err := d.db.Query(`
-		SELECT id, name, type, COALESCE(url, ''), interval_seconds, timeout_seconds, retries, retry_delay_seconds, 
+		SELECT c.id, c.name, c.type, COALESCE(c.url, ''), c.interval_seconds, c.timeout_seconds, c.retries, c.retry_delay_seconds, 
 			enabled, created_at, COALESCE(expected_status_codes::text, '[200]'), method, 
 			COALESCE(json_path, ''), COALESCE(expected_json_value, ''),
 			COALESCE(postgres_conn_string, ''), COALESCE(postgres_query, ''), COALESCE(expected_query_value, ''), 
 			COALESCE(host, ''), COALESCE(dns_hostname, ''), COALESCE(dns_record_type, ''), 
 			COALESCE(expected_dns_value, ''), group_id, COALESCE(tailscale_device_id, ''), 
 			COALESCE(tailscale_service_host, ''), COALESCE(tailscale_service_port, 0), 
-			COALESCE(tailscale_service_protocol, ''), COALESCE(tailscale_service_path, '')
-		FROM checks
-		ORDER BY created_at DESC
+			COALESCE(tailscale_service_protocol, ''), COALESCE(tailscale_service_path, ''),
+			cs.file_path, cs.taken_at, cs.last_error
+		FROM checks c
+		LEFT JOIN check_snapshots cs ON cs.check_id = c.id
+		ORDER BY c.created_at DESC
 	`)
 	if err != nil {
 		return nil, err
@@ -273,11 +283,15 @@ func (d *PostgresDB) GetAllChecks() ([]models.Check, error) {
 		var c models.Check
 		var statusCodesJSON string
 		var groupID sql.NullInt64
-		if err := rows.Scan(&c.ID, &c.Name, &c.Type, &c.URL, &c.IntervalSeconds, &c.TimeoutSeconds, 
+		var filePath sql.NullString
+		var takenAt sql.NullTime
+		var lastError sql.NullString
+		if err := rows.Scan(&c.ID, &c.Name, &c.Type, &c.URL, &c.IntervalSeconds, &c.TimeoutSeconds,
 			&c.Retries, &c.RetryDelaySeconds, &c.Enabled, &c.CreatedAt,
 			&statusCodesJSON, &c.Method, &c.JSONPath, &c.ExpectedJSONValue,
 			&c.PostgresConnString, &c.PostgresQuery, &c.ExpectedQueryValue, &c.Host,
-			&c.DNSHostname, &c.DNSRecordType, &c.ExpectedDNSValue, &groupID, &c.TailscaleDeviceID, &c.TailscaleServiceHost, &c.TailscaleServicePort, &c.TailscaleServiceProtocol, &c.TailscaleServicePath); err != nil {
+			&c.DNSHostname, &c.DNSRecordType, &c.ExpectedDNSValue, &groupID, &c.TailscaleDeviceID, &c.TailscaleServiceHost, &c.TailscaleServicePort, &c.TailscaleServiceProtocol, &c.TailscaleServicePath,
+			&filePath, &takenAt, &lastError); err != nil {
 			return nil, err
 		}
 		c.ExpectedStatusCodes = d.parseStatusCodes(statusCodesJSON)
@@ -285,6 +299,16 @@ func (d *PostgresDB) GetAllChecks() ([]models.Check, error) {
 			c.GroupID = &groupID.Int64
 		}
 		c.Tags, _ = d.GetCheckTags(c.ID)
+		if filePath.Valid {
+			c.SnapshotURL = fmt.Sprintf("/api/checks/%d/snapshot/image", c.ID)
+		}
+		if takenAt.Valid {
+			t := takenAt.Time
+			c.SnapshotTakenAt = &t
+		}
+		if lastError.Valid {
+			c.SnapshotError = lastError.String
+		}
 		checks = append(checks, c)
 	}
 
@@ -295,23 +319,29 @@ func (d *PostgresDB) GetCheck(id int64) (*models.Check, error) {
 	var c models.Check
 	var statusCodesJSON string
 	var groupID sql.NullInt64
+	var filePath sql.NullString
+	var takenAt sql.NullTime
+	var lastError sql.NullString
 	err := d.db.QueryRow(`
-		SELECT id, name, type, COALESCE(url, ''), interval_seconds, timeout_seconds, retries, retry_delay_seconds, 
+		SELECT c.id, c.name, c.type, COALESCE(c.url, ''), c.interval_seconds, c.timeout_seconds, c.retries, c.retry_delay_seconds, 
 			enabled, created_at, COALESCE(expected_status_codes::text, '[200]'), method, 
 			COALESCE(json_path, ''), COALESCE(expected_json_value, ''),
 			COALESCE(postgres_conn_string, ''), COALESCE(postgres_query, ''), COALESCE(expected_query_value, ''), 
 			COALESCE(host, ''), COALESCE(dns_hostname, ''), COALESCE(dns_record_type, ''), 
 			COALESCE(expected_dns_value, ''), group_id, COALESCE(tailscale_device_id, ''), 
 			COALESCE(tailscale_service_host, ''), COALESCE(tailscale_service_port, 0), 
-			COALESCE(tailscale_service_protocol, ''), COALESCE(tailscale_service_path, '')
-		FROM checks
-		WHERE id = $1
-	`, id).Scan(&c.ID, &c.Name, &c.Type, &c.URL, &c.IntervalSeconds, &c.TimeoutSeconds, 
+			COALESCE(tailscale_service_protocol, ''), COALESCE(tailscale_service_path, ''),
+			cs.file_path, cs.taken_at, cs.last_error
+		FROM checks c
+		LEFT JOIN check_snapshots cs ON cs.check_id = c.id
+		WHERE c.id = $1
+	`, id).Scan(&c.ID, &c.Name, &c.Type, &c.URL, &c.IntervalSeconds, &c.TimeoutSeconds,
 		&c.Retries, &c.RetryDelaySeconds, &c.Enabled, &c.CreatedAt,
 		&statusCodesJSON, &c.Method, &c.JSONPath, &c.ExpectedJSONValue,
 		&c.PostgresConnString, &c.PostgresQuery, &c.ExpectedQueryValue, &c.Host,
 		&c.DNSHostname, &c.DNSRecordType, &c.ExpectedDNSValue, &groupID, &c.TailscaleDeviceID,
-		&c.TailscaleServiceHost, &c.TailscaleServicePort, &c.TailscaleServiceProtocol, &c.TailscaleServicePath)
+		&c.TailscaleServiceHost, &c.TailscaleServicePort, &c.TailscaleServiceProtocol, &c.TailscaleServicePath,
+		&filePath, &takenAt, &lastError)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -325,6 +355,16 @@ func (d *PostgresDB) GetCheck(id int64) (*models.Check, error) {
 		c.GroupID = &groupID.Int64
 	}
 	c.Tags, _ = d.GetCheckTags(c.ID)
+	if filePath.Valid {
+		c.SnapshotURL = fmt.Sprintf("/api/checks/%d/snapshot/image", c.ID)
+	}
+	if takenAt.Valid {
+		t := takenAt.Time
+		c.SnapshotTakenAt = &t
+	}
+	if lastError.Valid {
+		c.SnapshotError = lastError.String
+	}
 	return &c, nil
 }
 
@@ -338,7 +378,7 @@ func (d *PostgresDB) CreateCheck(c *models.Check) error {
 			tailscale_service_host, tailscale_service_port, tailscale_service_protocol, tailscale_service_path)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
 		RETURNING id, created_at
-	`, c.Name, c.Type, c.URL, c.IntervalSeconds, c.TimeoutSeconds, c.Retries, c.RetryDelaySeconds, 
+	`, c.Name, c.Type, c.URL, c.IntervalSeconds, c.TimeoutSeconds, c.Retries, c.RetryDelaySeconds,
 		c.Enabled, statusCodesJSON, c.Method, c.JSONPath, c.ExpectedJSONValue,
 		c.PostgresConnString, c.PostgresQuery, c.ExpectedQueryValue, c.Host,
 		c.DNSHostname, c.DNSRecordType, c.ExpectedDNSValue, c.GroupID, c.TailscaleDeviceID,
@@ -359,7 +399,7 @@ func (d *PostgresDB) UpdateCheck(c *models.Check) error {
 			tailscale_device_id = $21, tailscale_service_host = $22, tailscale_service_port = $23,
 			tailscale_service_protocol = $24, tailscale_service_path = $25
 		WHERE id = $26
-	`, c.Name, c.Type, c.URL, c.IntervalSeconds, c.TimeoutSeconds, c.Retries, c.RetryDelaySeconds, 
+	`, c.Name, c.Type, c.URL, c.IntervalSeconds, c.TimeoutSeconds, c.Retries, c.RetryDelaySeconds,
 		c.Enabled, statusCodesJSON, c.Method, c.JSONPath, c.ExpectedJSONValue,
 		c.PostgresConnString, c.PostgresQuery, c.ExpectedQueryValue, c.Host,
 		c.DNSHostname, c.DNSRecordType, c.ExpectedDNSValue, c.GroupID, c.TailscaleDeviceID,
@@ -374,16 +414,18 @@ func (d *PostgresDB) DeleteCheck(id int64) error {
 
 func (d *PostgresDB) GetEnabledChecks() ([]models.Check, error) {
 	rows, err := d.db.Query(`
-		SELECT id, name, type, COALESCE(url, ''), interval_seconds, timeout_seconds, retries, retry_delay_seconds, 
+		SELECT c.id, c.name, c.type, COALESCE(c.url, ''), c.interval_seconds, c.timeout_seconds, c.retries, c.retry_delay_seconds, 
 			enabled, created_at, COALESCE(expected_status_codes::text, '[200]'), method, 
 			COALESCE(json_path, ''), COALESCE(expected_json_value, ''),
 			COALESCE(postgres_conn_string, ''), COALESCE(postgres_query, ''), COALESCE(expected_query_value, ''), 
 			COALESCE(host, ''), COALESCE(dns_hostname, ''), COALESCE(dns_record_type, ''), 
 			COALESCE(expected_dns_value, ''), group_id, COALESCE(tailscale_device_id, ''), 
 			COALESCE(tailscale_service_host, ''), COALESCE(tailscale_service_port, 0), 
-			COALESCE(tailscale_service_protocol, ''), COALESCE(tailscale_service_path, '')
-		FROM checks
-		WHERE enabled = true
+			COALESCE(tailscale_service_protocol, ''), COALESCE(tailscale_service_path, ''),
+			cs.file_path, cs.taken_at, cs.last_error
+		FROM checks c
+		LEFT JOIN check_snapshots cs ON cs.check_id = c.id
+		WHERE c.enabled = true
 	`)
 	if err != nil {
 		return nil, err
@@ -395,16 +437,30 @@ func (d *PostgresDB) GetEnabledChecks() ([]models.Check, error) {
 		var c models.Check
 		var statusCodesJSON string
 		var groupID sql.NullInt64
-		if err := rows.Scan(&c.ID, &c.Name, &c.Type, &c.URL, &c.IntervalSeconds, &c.TimeoutSeconds, 
+		var filePath sql.NullString
+		var takenAt sql.NullTime
+		var lastError sql.NullString
+		if err := rows.Scan(&c.ID, &c.Name, &c.Type, &c.URL, &c.IntervalSeconds, &c.TimeoutSeconds,
 			&c.Retries, &c.RetryDelaySeconds, &c.Enabled, &c.CreatedAt,
 			&statusCodesJSON, &c.Method, &c.JSONPath, &c.ExpectedJSONValue,
 			&c.PostgresConnString, &c.PostgresQuery, &c.ExpectedQueryValue, &c.Host,
-			&c.DNSHostname, &c.DNSRecordType, &c.ExpectedDNSValue, &groupID, &c.TailscaleDeviceID, &c.TailscaleServiceHost, &c.TailscaleServicePort, &c.TailscaleServiceProtocol, &c.TailscaleServicePath); err != nil {
+			&c.DNSHostname, &c.DNSRecordType, &c.ExpectedDNSValue, &groupID, &c.TailscaleDeviceID, &c.TailscaleServiceHost, &c.TailscaleServicePort, &c.TailscaleServiceProtocol, &c.TailscaleServicePath,
+			&filePath, &takenAt, &lastError); err != nil {
 			return nil, err
 		}
 		c.ExpectedStatusCodes = d.parseStatusCodes(statusCodesJSON)
 		if groupID.Valid {
 			c.GroupID = &groupID.Int64
+		}
+		if filePath.Valid {
+			c.SnapshotURL = fmt.Sprintf("/api/checks/%d/snapshot/image", c.ID)
+		}
+		if takenAt.Valid {
+			t := takenAt.Time
+			c.SnapshotTakenAt = &t
+		}
+		if lastError.Valid {
+			c.SnapshotError = lastError.String
 		}
 		checks = append(checks, c)
 	}
@@ -600,6 +656,83 @@ func (d *PostgresDB) SetSetting(key, value string) error {
 		ON CONFLICT(key) DO UPDATE SET value = $2
 	`, key, value)
 	return err
+}
+
+func (d *PostgresDB) GetCheckSnapshot(checkID int64) (*models.CheckSnapshot, error) {
+	var filePath sql.NullString
+	var takenAt sql.NullTime
+	var lastError sql.NullString
+
+	err := d.db.QueryRow(`
+		SELECT file_path, taken_at, last_error
+		FROM check_snapshots
+		WHERE check_id = $1
+	`, checkID).Scan(&filePath, &takenAt, &lastError)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	snapshot := models.CheckSnapshot{CheckID: checkID}
+	if filePath.Valid {
+		snapshot.FilePath = filePath.String
+	}
+	if takenAt.Valid {
+		t := takenAt.Time
+		snapshot.TakenAt = &t
+	}
+	if lastError.Valid {
+		snapshot.LastError = lastError.String
+	}
+	return &snapshot, nil
+}
+
+func (d *PostgresDB) UpsertCheckSnapshot(snapshot *models.CheckSnapshot) error {
+	_, err := d.db.Exec(`
+		INSERT INTO check_snapshots (check_id, file_path, taken_at, last_error)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT(check_id) DO UPDATE SET
+			file_path = EXCLUDED.file_path,
+			taken_at = EXCLUDED.taken_at,
+			last_error = EXCLUDED.last_error
+	`, snapshot.CheckID, snapshot.FilePath, snapshot.TakenAt, snapshot.LastError)
+	return err
+}
+
+func (d *PostgresDB) GetAllCheckSnapshots() ([]models.CheckSnapshot, error) {
+	rows, err := d.db.Query(`
+		SELECT check_id, file_path, taken_at, last_error
+		FROM check_snapshots
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var snapshots []models.CheckSnapshot
+	for rows.Next() {
+		var snap models.CheckSnapshot
+		var filePath sql.NullString
+		var takenAt sql.NullTime
+		var lastError sql.NullString
+		if err := rows.Scan(&snap.CheckID, &filePath, &takenAt, &lastError); err != nil {
+			return nil, err
+		}
+		if filePath.Valid {
+			snap.FilePath = filePath.String
+		}
+		if takenAt.Valid {
+			t := takenAt.Time
+			snap.TakenAt = &t
+		}
+		if lastError.Valid {
+			snap.LastError = lastError.String
+		}
+		snapshots = append(snapshots, snap)
+	}
+	return snapshots, rows.Err()
 }
 
 func (d *PostgresDB) GetAllGroups() ([]models.Group, error) {
@@ -799,7 +932,7 @@ func (d *PostgresDB) CreateAPIKey(key *models.APIKey) error {
 func (d *PostgresDB) GetAPIKeyByHash(keyHash string) (*models.APIKey, error) {
 	var k models.APIKey
 	var lastUsedAt sql.NullTime
-	err := d.db.QueryRow(`SELECT id, user_id, name, key_hash, last_used_at, created_at FROM api_keys WHERE key_hash = $1`, 
+	err := d.db.QueryRow(`SELECT id, user_id, name, key_hash, last_used_at, created_at FROM api_keys WHERE key_hash = $1`,
 		keyHash).Scan(&k.ID, &k.UserID, &k.Name, &k.KeyHash, &lastUsedAt, &k.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -814,7 +947,7 @@ func (d *PostgresDB) GetAPIKeyByHash(keyHash string) (*models.APIKey, error) {
 }
 
 func (d *PostgresDB) GetAPIKeysByUserID(userID int64) ([]models.APIKey, error) {
-	rows, err := d.db.Query(`SELECT id, user_id, name, key_hash, last_used_at, created_at FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC`, 
+	rows, err := d.db.Query(`SELECT id, user_id, name, key_hash, last_used_at, created_at FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC`,
 		userID)
 	if err != nil {
 		return nil, err

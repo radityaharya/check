@@ -224,7 +224,7 @@ func (e *Engine) performCheck(state *checkState) {
 	}
 
 	state.lastStatus = &history
-	
+
 	// Broadcast the result to SSE clients
 	e.broadcastCheckResult(check, &history)
 }
@@ -237,12 +237,36 @@ func (e *Engine) broadcastCheckResult(check models.Check, history *models.CheckH
 		IsUp:          history.Success,
 		LastCheckedAt: &history.CheckedAt,
 	}
-	
+
 	// Non-blocking send
 	select {
 	case e.broadcast <- event:
 	default:
 		// Buffer full, skip this event
+	}
+}
+
+// BroadcastCheckSnapshot sends a check_update event reflecting snapshot metadata changes.
+func (e *Engine) BroadcastCheckSnapshot(check models.Check) {
+	lastStatus, _ := e.db.GetLastStatus(check.ID)
+	var lastCheckedAt *time.Time
+	isUp := false
+	if lastStatus != nil {
+		lastCheckedAt = &lastStatus.CheckedAt
+		isUp = lastStatus.Success
+	}
+
+	event := &CheckResultEvent{
+		CheckID:       check.ID,
+		Check:         check,
+		LastStatus:    lastStatus,
+		IsUp:          isUp,
+		LastCheckedAt: lastCheckedAt,
+	}
+
+	select {
+	case e.broadcast <- event:
+	default:
 	}
 }
 

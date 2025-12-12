@@ -20,4 +20,4 @@ import.json
 /data/
 node_modules
 
-.tmp
+tmp/

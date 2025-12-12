@@ -79,6 +79,14 @@ async function triggerCheck(id: number): Promise<void> {
   if (!response.ok) throw new Error('Failed to trigger check');
 }
 
+async function triggerSnapshot(id: number): Promise<void> {
+  const response = await fetch(`/api/checks/${id}/snapshot/trigger`, { method: 'POST' });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to trigger snapshot');
+  }
+}
+
 async function toggleCheckEnabled(check: Check): Promise<Check> {
   const updateData = {
     ...check,
@@ -163,6 +171,12 @@ export function useDeleteCheck() {
 export function useTriggerCheck() {
   return useMutation({
     mutationFn: triggerCheck,
+  });
+}
+
+export function useTriggerSnapshot() {
+  return useMutation({
+    mutationFn: triggerSnapshot,
   });
 }
 

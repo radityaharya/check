@@ -45,6 +45,9 @@ export interface Check {
   tailscale_service_port?: number;
   tailscale_service_protocol?: string;
   tailscale_service_path?: string;
+  snapshot_url?: string;
+  snapshot_taken_at?: string;
+  snapshot_error?: string;
   is_up?: boolean;
   last_checked_at?: string;
   last_status?: CheckStatus;
@@ -108,6 +111,8 @@ export interface Settings {
   gotify_token: string;
   tailscale_api_key: string;
   tailscale_tailnet: string;
+  cloudflare_account_id: string;
+  cloudflare_api_token: string;
 }
 
 export interface TailscaleDevice {

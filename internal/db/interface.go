@@ -30,6 +30,9 @@ type DB interface {
 	// Settings operations
 	GetSetting(key string) (string, error)
 	SetSetting(key, value string) error
+	GetCheckSnapshot(checkID int64) (*models.CheckSnapshot, error)
+	UpsertCheckSnapshot(snapshot *models.CheckSnapshot) error
+	GetAllCheckSnapshots() ([]models.CheckSnapshot, error)
 
 	// Group operations
 	GetAllGroups() ([]models.Group, error)

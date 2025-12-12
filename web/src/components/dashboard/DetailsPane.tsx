@@ -12,6 +12,7 @@ import {
 } from '@/hooks';
 import { useTimeAgoTick, formatTimeAgo } from '@/hooks/use-time-ago';
 import type { Check, CheckStatus, TimeRange } from '@/types';
+import { useTriggerSnapshot } from '@/hooks/use-checks';
 
 interface DetailsPaneProps {
   check: Check | null;
@@ -33,6 +34,17 @@ export function DetailsPane({
   const triggerMutation = useTriggerCheck();
   const toggleEnabledMutation = useToggleCheckEnabled();
   const deleteMutation = useDeleteCheck();
+  const snapshotMutation = useTriggerSnapshot();
+  const snapshotSrc =
+    check?.snapshot_url && check?.snapshot_url.length > 0
+      ? `${check.snapshot_url}${check.snapshot_taken_at ? `?t=${encodeURIComponent(check.snapshot_taken_at)}` : ''}`
+      : '';
+  const isSnapshotCapable =
+    (!!check?.url &&
+      (check.url.startsWith('http://') || check.url.startsWith('https://'))) ||
+    (check?.type === 'tailscale_service' &&
+      !!check?.tailscale_service_host &&
+      (check.tailscale_service_protocol === 'http' || check.tailscale_service_protocol === 'https'));
 
   // Re-render every 5 seconds to keep "time ago" displays fresh
   useTimeAgoTick(5000);
@@ -46,6 +58,17 @@ export function DetailsPane({
       showToast('Check triggered. Waiting for next result…', 'success');
     } catch {
       showToast('Failed to trigger check', 'error');
+    }
+  };
+
+  const handleSnapshot = async () => {
+    if (!check) return;
+    try {
+      await snapshotMutation.mutateAsync(check.id);
+      showToast('Snapshot triggered. Refresh in a moment.', 'success');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to trigger snapshot';
+      showToast(message, 'error');
     }
   };
 
@@ -170,6 +193,13 @@ export function DetailsPane({
                 changes log
               </button>
               <button
+                onClick={handleSnapshot}
+                disabled={snapshotMutation.isPending}
+                className="text-[10px] bg-terminal-cyan/20 hover:bg-terminal-cyan/30 text-terminal-cyan px-3 py-1.5 rounded uppercase tracking-wide disabled:opacity-50"
+              >
+                {snapshotMutation.isPending ? 'snapshotting…' : 'snapshot now'}
+              </button>
+              <button
                 onClick={handleDelete}
                 className="text-[10px] bg-terminal-red/20 hover:bg-terminal-red/30 text-terminal-red px-3 py-1.5 rounded uppercase tracking-wide"
               >
@@ -177,6 +207,41 @@ export function DetailsPane({
               </button>
             </div>
           </div>
+
+          {/* Snapshot */}
+          {isSnapshotCapable && (
+            <div className="p-6 border-b border-terminal-border">
+              <div className="flex justify-between items-center text-xs mb-3">
+                <span className="text-terminal-muted uppercase tracking-widest">Snapshot</span>
+                <span className="text-terminal-muted">
+                  {check.snapshot_taken_at
+                    ? `captured ${formatTimeAgo(check.snapshot_taken_at)}`
+                    : 'auto refresh every 6h'}
+                </span>
+              </div>
+              {snapshotSrc ? (
+                <div className="border border-terminal-border rounded overflow-hidden bg-terminal-bg">
+                  <img
+                    src={snapshotSrc}
+                    alt="Latest monitor snapshot"
+                    className="w-full aspect-video object-cover"
+                  />
+                </div>
+              ) : (
+                <div className="border border-terminal-border rounded bg-terminal-bg text-terminal-muted text-sm p-6">
+                  Snapshot pending. Configure Cloudflare credentials in settings to enable previews.
+                </div>
+              )}
+              {check.snapshot_error && (
+                <div className="text-terminal-red text-xs mt-2 break-words">
+                  {check.snapshot_error}
+                </div>
+              )}
+              <div className="text-[10px] text-terminal-muted mt-2">
+                Stored in the server data directory and refreshed every 6 hours.
+              </div>
+            </div>
+          )}
 
           {/* Chart */}
           <div className="p-6 border-b border-terminal-border">

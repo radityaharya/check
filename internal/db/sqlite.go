@@ -91,6 +91,15 @@ func (d *SQLiteDB) initSchema() error {
 		value TEXT
 	);`
 
+	screenshotTable := `
+CREATE TABLE IF NOT EXISTS check_snapshots (
+	check_id INTEGER PRIMARY KEY,
+	file_path TEXT,
+	taken_at DATETIME,
+	last_error TEXT,
+	FOREIGN KEY (check_id) REFERENCES checks(id) ON DELETE CASCADE
+);`
+
 	usersTable := `
 	CREATE TABLE IF NOT EXISTS users (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -180,6 +189,9 @@ func (d *SQLiteDB) initSchema() error {
 		return err
 	}
 	if _, err := d.db.Exec(settingsTable); err != nil {
+		return err
+	}
+	if _, err := d.db.Exec(screenshotTable); err != nil {
 		return err
 	}
 	if _, err := d.db.Exec(usersTable); err != nil {
@@ -274,13 +286,15 @@ func (d *SQLiteDB) encodeStatusCodes(codes []int) string {
 
 func (d *SQLiteDB) GetAllChecks() ([]models.Check, error) {
 	rows, err := d.db.Query(`
-		SELECT id, name, COALESCE(type, 'http'), COALESCE(url, ''), interval_seconds, timeout_seconds, COALESCE(retries, 0), COALESCE(retry_delay_seconds, 5), enabled, created_at,
-			COALESCE(expected_status_codes, '[200]'), COALESCE(method, 'GET'), COALESCE(json_path, ''), COALESCE(expected_json_value, ''),
-			COALESCE(postgres_conn_string, ''), COALESCE(postgres_query, ''), COALESCE(expected_query_value, ''), COALESCE(host, ''),
-			COALESCE(dns_hostname, ''), COALESCE(dns_record_type, ''), COALESCE(expected_dns_value, ''), group_id, COALESCE(tailscale_device_id, ''),
-			COALESCE(tailscale_service_host, ''), COALESCE(tailscale_service_port, 0), COALESCE(tailscale_service_protocol, ''), COALESCE(tailscale_service_path, '')
-		FROM checks
-		ORDER BY created_at DESC
+		SELECT c.id, c.name, COALESCE(c.type, 'http'), COALESCE(c.url, ''), c.interval_seconds, c.timeout_seconds, COALESCE(c.retries, 0), COALESCE(c.retry_delay_seconds, 5), c.enabled, c.created_at,
+			COALESCE(c.expected_status_codes, '[200]'), COALESCE(c.method, 'GET'), COALESCE(c.json_path, ''), COALESCE(c.expected_json_value, ''),
+			COALESCE(c.postgres_conn_string, ''), COALESCE(c.postgres_query, ''), COALESCE(c.expected_query_value, ''), COALESCE(c.host, ''),
+			COALESCE(c.dns_hostname, ''), COALESCE(c.dns_record_type, ''), COALESCE(c.expected_dns_value, ''), c.group_id, COALESCE(c.tailscale_device_id, ''),
+			COALESCE(c.tailscale_service_host, ''), COALESCE(c.tailscale_service_port, 0), COALESCE(c.tailscale_service_protocol, ''), COALESCE(c.tailscale_service_path, ''),
+			cs.file_path, cs.taken_at, cs.last_error
+		FROM checks c
+		LEFT JOIN check_snapshots cs ON cs.check_id = c.id
+		ORDER BY c.created_at DESC
 	`)
 	if err != nil {
 		return nil, err
@@ -292,11 +306,15 @@ func (d *SQLiteDB) GetAllChecks() ([]models.Check, error) {
 		var c models.Check
 		var statusCodesJSON string
 		var groupID sql.NullInt64
+		var filePath sql.NullString
+		var takenAt sql.NullTime
+		var lastError sql.NullString
 		if err := rows.Scan(&c.ID, &c.Name, &c.Type, &c.URL, &c.IntervalSeconds, &c.TimeoutSeconds, &c.Retries, &c.RetryDelaySeconds, &c.Enabled, &c.CreatedAt,
 			&statusCodesJSON, &c.Method, &c.JSONPath, &c.ExpectedJSONValue,
 			&c.PostgresConnString, &c.PostgresQuery, &c.ExpectedQueryValue, &c.Host,
 			&c.DNSHostname, &c.DNSRecordType, &c.ExpectedDNSValue, &groupID, &c.TailscaleDeviceID,
-			&c.TailscaleServiceHost, &c.TailscaleServicePort, &c.TailscaleServiceProtocol, &c.TailscaleServicePath); err != nil {
+			&c.TailscaleServiceHost, &c.TailscaleServicePort, &c.TailscaleServiceProtocol, &c.TailscaleServicePath,
+			&filePath, &takenAt, &lastError); err != nil {
 			return nil, err
 		}
 		c.ExpectedStatusCodes = d.parseStatusCodes(statusCodesJSON)
@@ -304,6 +322,16 @@ func (d *SQLiteDB) GetAllChecks() ([]models.Check, error) {
 			c.GroupID = &groupID.Int64
 		}
 		c.Tags, _ = d.GetCheckTags(c.ID)
+		if filePath.Valid {
+			c.SnapshotURL = fmt.Sprintf("/api/checks/%d/snapshot/image", c.ID)
+		}
+		if takenAt.Valid {
+			t := takenAt.Time
+			c.SnapshotTakenAt = &t
+		}
+		if lastError.Valid {
+			c.SnapshotError = lastError.String
+		}
 		checks = append(checks, c)
 	}
 
@@ -314,19 +342,25 @@ func (d *SQLiteDB) GetCheck(id int64) (*models.Check, error) {
 	var c models.Check
 	var statusCodesJSON string
 	var groupID sql.NullInt64
+	var filePath sql.NullString
+	var takenAt sql.NullTime
+	var lastError sql.NullString
 	err := d.db.QueryRow(`
-		SELECT id, name, COALESCE(type, 'http'), COALESCE(url, ''), interval_seconds, timeout_seconds, COALESCE(retries, 0), COALESCE(retry_delay_seconds, 5), enabled, created_at,
-			COALESCE(expected_status_codes, '[200]'), COALESCE(method, 'GET'), COALESCE(json_path, ''), COALESCE(expected_json_value, ''),
-			COALESCE(postgres_conn_string, ''), COALESCE(postgres_query, ''), COALESCE(expected_query_value, ''), COALESCE(host, ''),
-			COALESCE(dns_hostname, ''), COALESCE(dns_record_type, ''), COALESCE(expected_dns_value, ''), group_id, COALESCE(tailscale_device_id, ''),
-			COALESCE(tailscale_service_host, ''), COALESCE(tailscale_service_port, 0), COALESCE(tailscale_service_protocol, ''), COALESCE(tailscale_service_path, '')
-		FROM checks
-		WHERE id = ?
+		SELECT c.id, c.name, COALESCE(c.type, 'http'), COALESCE(c.url, ''), c.interval_seconds, c.timeout_seconds, COALESCE(c.retries, 0), COALESCE(c.retry_delay_seconds, 5), c.enabled, c.created_at,
+			COALESCE(c.expected_status_codes, '[200]'), COALESCE(c.method, 'GET'), COALESCE(c.json_path, ''), COALESCE(c.expected_json_value, ''),
+			COALESCE(c.postgres_conn_string, ''), COALESCE(c.postgres_query, ''), COALESCE(c.expected_query_value, ''), COALESCE(c.host, ''),
+			COALESCE(c.dns_hostname, ''), COALESCE(c.dns_record_type, ''), COALESCE(c.expected_dns_value, ''), c.group_id, COALESCE(c.tailscale_device_id, ''),
+			COALESCE(c.tailscale_service_host, ''), COALESCE(c.tailscale_service_port, 0), COALESCE(c.tailscale_service_protocol, ''), COALESCE(c.tailscale_service_path, ''),
+			cs.file_path, cs.taken_at, cs.last_error
+		FROM checks c
+		LEFT JOIN check_snapshots cs ON cs.check_id = c.id
+		WHERE c.id = ?
 	`, id).Scan(&c.ID, &c.Name, &c.Type, &c.URL, &c.IntervalSeconds, &c.TimeoutSeconds, &c.Retries, &c.RetryDelaySeconds, &c.Enabled, &c.CreatedAt,
 		&statusCodesJSON, &c.Method, &c.JSONPath, &c.ExpectedJSONValue,
 		&c.PostgresConnString, &c.PostgresQuery, &c.ExpectedQueryValue, &c.Host,
 		&c.DNSHostname, &c.DNSRecordType, &c.ExpectedDNSValue, &groupID, &c.TailscaleDeviceID,
-		&c.TailscaleServiceHost, &c.TailscaleServicePort, &c.TailscaleServiceProtocol, &c.TailscaleServicePath)
+		&c.TailscaleServiceHost, &c.TailscaleServicePort, &c.TailscaleServiceProtocol, &c.TailscaleServicePath,
+		&filePath, &takenAt, &lastError)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -340,6 +374,16 @@ func (d *SQLiteDB) GetCheck(id int64) (*models.Check, error) {
 		c.GroupID = &groupID.Int64
 	}
 	c.Tags, _ = d.GetCheckTags(c.ID)
+	if filePath.Valid {
+		c.SnapshotURL = fmt.Sprintf("/api/checks/%d/snapshot/image", c.ID)
+	}
+	if takenAt.Valid {
+		t := takenAt.Time
+		c.SnapshotTakenAt = &t
+	}
+	if lastError.Valid {
+		c.SnapshotError = lastError.String
+	}
 	return &c, nil
 }
 
@@ -396,13 +440,15 @@ func (d *SQLiteDB) DeleteCheck(id int64) error {
 
 func (d *SQLiteDB) GetEnabledChecks() ([]models.Check, error) {
 	rows, err := d.db.Query(`
-		SELECT id, name, COALESCE(type, 'http'), COALESCE(url, ''), interval_seconds, timeout_seconds, COALESCE(retries, 0), COALESCE(retry_delay_seconds, 5), enabled, created_at,
-			COALESCE(expected_status_codes, '[200]'), COALESCE(method, 'GET'), COALESCE(json_path, ''), COALESCE(expected_json_value, ''),
-			COALESCE(postgres_conn_string, ''), COALESCE(postgres_query, ''), COALESCE(expected_query_value, ''), COALESCE(host, ''),
-			COALESCE(dns_hostname, ''), COALESCE(dns_record_type, ''), COALESCE(expected_dns_value, ''), group_id, COALESCE(tailscale_device_id, ''),
-			COALESCE(tailscale_service_host, ''), COALESCE(tailscale_service_port, 0), COALESCE(tailscale_service_protocol, ''), COALESCE(tailscale_service_path, '')
-		FROM checks
-		WHERE enabled = 1
+		SELECT c.id, c.name, COALESCE(c.type, 'http'), COALESCE(c.url, ''), c.interval_seconds, c.timeout_seconds, COALESCE(c.retries, 0), COALESCE(c.retry_delay_seconds, 5), c.enabled, c.created_at,
+			COALESCE(c.expected_status_codes, '[200]'), COALESCE(c.method, 'GET'), COALESCE(c.json_path, ''), COALESCE(c.expected_json_value, ''),
+			COALESCE(c.postgres_conn_string, ''), COALESCE(c.postgres_query, ''), COALESCE(c.expected_query_value, ''), COALESCE(c.host, ''),
+			COALESCE(c.dns_hostname, ''), COALESCE(c.dns_record_type, ''), COALESCE(c.expected_dns_value, ''), c.group_id, COALESCE(c.tailscale_device_id, ''),
+			COALESCE(c.tailscale_service_host, ''), COALESCE(c.tailscale_service_port, 0), COALESCE(c.tailscale_service_protocol, ''), COALESCE(c.tailscale_service_path, ''),
+			cs.file_path, cs.taken_at, cs.last_error
+		FROM checks c
+		LEFT JOIN check_snapshots cs ON cs.check_id = c.id
+		WHERE c.enabled = 1
 	`)
 	if err != nil {
 		return nil, err
@@ -414,16 +460,30 @@ func (d *SQLiteDB) GetEnabledChecks() ([]models.Check, error) {
 		var c models.Check
 		var statusCodesJSON string
 		var groupID sql.NullInt64
+		var filePath sql.NullString
+		var takenAt sql.NullTime
+		var lastError sql.NullString
 		if err := rows.Scan(&c.ID, &c.Name, &c.Type, &c.URL, &c.IntervalSeconds, &c.TimeoutSeconds, &c.Retries, &c.RetryDelaySeconds, &c.Enabled, &c.CreatedAt,
 			&statusCodesJSON, &c.Method, &c.JSONPath, &c.ExpectedJSONValue,
 			&c.PostgresConnString, &c.PostgresQuery, &c.ExpectedQueryValue, &c.Host,
 			&c.DNSHostname, &c.DNSRecordType, &c.ExpectedDNSValue, &groupID, &c.TailscaleDeviceID,
-			&c.TailscaleServiceHost, &c.TailscaleServicePort, &c.TailscaleServiceProtocol, &c.TailscaleServicePath); err != nil {
+			&c.TailscaleServiceHost, &c.TailscaleServicePort, &c.TailscaleServiceProtocol, &c.TailscaleServicePath,
+			&filePath, &takenAt, &lastError); err != nil {
 			return nil, err
 		}
 		c.ExpectedStatusCodes = d.parseStatusCodes(statusCodesJSON)
 		if groupID.Valid {
 			c.GroupID = &groupID.Int64
+		}
+		if filePath.Valid {
+			c.SnapshotURL = fmt.Sprintf("/api/checks/%d/snapshot/image", c.ID)
+		}
+		if takenAt.Valid {
+			t := takenAt.Time
+			c.SnapshotTakenAt = &t
+		}
+		if lastError.Valid {
+			c.SnapshotError = lastError.String
 		}
 		checks = append(checks, c)
 	}
@@ -621,6 +681,83 @@ func (d *SQLiteDB) SetSetting(key, value string) error {
 	return err
 }
 
+func (d *SQLiteDB) GetCheckSnapshot(checkID int64) (*models.CheckSnapshot, error) {
+	var filePath sql.NullString
+	var takenAt sql.NullTime
+	var lastError sql.NullString
+
+	err := d.db.QueryRow(`
+		SELECT file_path, taken_at, last_error
+		FROM check_snapshots
+		WHERE check_id = ?
+	`, checkID).Scan(&filePath, &takenAt, &lastError)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	snapshot := models.CheckSnapshot{CheckID: checkID}
+	if filePath.Valid {
+		snapshot.FilePath = filePath.String
+	}
+	if takenAt.Valid {
+		t := takenAt.Time
+		snapshot.TakenAt = &t
+	}
+	if lastError.Valid {
+		snapshot.LastError = lastError.String
+	}
+	return &snapshot, nil
+}
+
+func (d *SQLiteDB) UpsertCheckSnapshot(snapshot *models.CheckSnapshot) error {
+	_, err := d.db.Exec(`
+		INSERT INTO check_snapshots (check_id, file_path, taken_at, last_error)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(check_id) DO UPDATE SET
+			file_path = excluded.file_path,
+			taken_at = excluded.taken_at,
+			last_error = excluded.last_error
+	`, snapshot.CheckID, snapshot.FilePath, snapshot.TakenAt, snapshot.LastError)
+	return err
+}
+
+func (d *SQLiteDB) GetAllCheckSnapshots() ([]models.CheckSnapshot, error) {
+	rows, err := d.db.Query(`
+		SELECT check_id, file_path, taken_at, last_error
+		FROM check_snapshots
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var snapshots []models.CheckSnapshot
+	for rows.Next() {
+		var snap models.CheckSnapshot
+		var takenAt sql.NullTime
+		var filePath sql.NullString
+		var lastError sql.NullString
+		if err := rows.Scan(&snap.CheckID, &filePath, &takenAt, &lastError); err != nil {
+			return nil, err
+		}
+		if filePath.Valid {
+			snap.FilePath = filePath.String
+		}
+		if takenAt.Valid {
+			t := takenAt.Time
+			snap.TakenAt = &t
+		}
+		if lastError.Valid {
+			snap.LastError = lastError.String
+		}
+		snapshots = append(snapshots, snap)
+	}
+	return snapshots, rows.Err()
+}
+
 func (d *SQLiteDB) GetAllGroups() ([]models.Group, error) {
 	rows, err := d.db.Query(`SELECT id, name, sort_order, created_at FROM groups ORDER BY sort_order, name`)
 	if err != nil {
@@ -815,7 +952,7 @@ func (d *SQLiteDB) HasUsers() (bool, error) {
 }
 
 func (d *SQLiteDB) CreateAPIKey(key *models.APIKey) error {
-	result, err := d.db.Exec(`INSERT INTO api_keys (user_id, name, key_hash) VALUES (?, ?, ?)`, 
+	result, err := d.db.Exec(`INSERT INTO api_keys (user_id, name, key_hash) VALUES (?, ?, ?)`,
 		key.UserID, key.Name, key.KeyHash)
 	if err != nil {
 		return err
@@ -832,7 +969,7 @@ func (d *SQLiteDB) CreateAPIKey(key *models.APIKey) error {
 func (d *SQLiteDB) GetAPIKeyByHash(keyHash string) (*models.APIKey, error) {
 	var k models.APIKey
 	var lastUsedAt sql.NullTime
-	err := d.db.QueryRow(`SELECT id, user_id, name, key_hash, last_used_at, created_at FROM api_keys WHERE key_hash = ?`, 
+	err := d.db.QueryRow(`SELECT id, user_id, name, key_hash, last_used_at, created_at FROM api_keys WHERE key_hash = ?`,
 		keyHash).Scan(&k.ID, &k.UserID, &k.Name, &k.KeyHash, &lastUsedAt, &k.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -847,7 +984,7 @@ func (d *SQLiteDB) GetAPIKeyByHash(keyHash string) (*models.APIKey, error) {
 }
 
 func (d *SQLiteDB) GetAPIKeysByUserID(userID int64) ([]models.APIKey, error) {
-	rows, err := d.db.Query(`SELECT id, user_id, name, key_hash, last_used_at, created_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC`, 
+	rows, err := d.db.Query(`SELECT id, user_id, name, key_hash, last_used_at, created_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC`,
 		userID)
 	if err != nil {
 		return nil, err

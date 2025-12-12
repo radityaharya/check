@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
@@ -13,22 +15,27 @@ import (
 	"gocheck/internal/db"
 	"gocheck/internal/models"
 	"gocheck/internal/notifier"
+	"gocheck/internal/snapshot"
 
 	"github.com/gorilla/mux"
 	tailscale "tailscale.com/client/tailscale/v2"
 )
 
 type Handlers struct {
-	db        *db.Database
-	engine    *checker.Engine
-	notifiers []notifier.Notifier
+	db              *db.Database
+	engine          *checker.Engine
+	notifiers       []notifier.Notifier
+	snapshotService *snapshot.Service
+	dataDir         string
 }
 
-func NewHandlers(database *db.Database, engine *checker.Engine, notifiers []notifier.Notifier) *Handlers {
+func NewHandlers(database *db.Database, engine *checker.Engine, notifiers []notifier.Notifier, snapshotService *snapshot.Service, dataDir string) *Handlers {
 	return &Handlers{
-		db:        database,
-		engine:    engine,
-		notifiers: notifiers,
+		db:              database,
+		engine:          engine,
+		notifiers:       notifiers,
+		snapshotService: snapshotService,
+		dataDir:         dataDir,
 	}
 }
 
@@ -446,13 +453,17 @@ func (h *Handlers) GetSettings(w http.ResponseWriter, r *http.Request) {
 	gotifyToken, _ := h.db.GetSetting("gotify_token")
 	tailscaleAPIKey, _ := h.db.GetSetting("tailscale_api_key")
 	tailscaleTailnet, _ := h.db.GetSetting("tailscale_tailnet")
+	cloudflareAccountID, _ := h.db.GetSetting("cloudflare_account_id")
+	cloudflareAPIToken, _ := h.db.GetSetting("cloudflare_api_token")
 
 	settings := models.Settings{
-		DiscordWebhookURL: webhookURL,
-		GotifyServerURL:   gotifyServerURL,
-		GotifyToken:       gotifyToken,
-		TailscaleAPIKey:   tailscaleAPIKey,
-		TailscaleTailnet:  tailscaleTailnet,
+		DiscordWebhookURL:   webhookURL,
+		GotifyServerURL:     gotifyServerURL,
+		GotifyToken:         gotifyToken,
+		TailscaleAPIKey:     tailscaleAPIKey,
+		TailscaleTailnet:    tailscaleTailnet,
+		CloudflareAccountID: cloudflareAccountID,
+		CloudflareAPIToken:  cloudflareAPIToken,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -486,6 +497,14 @@ func (h *Handlers) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if err := h.db.SetSetting("cloudflare_account_id", settings.CloudflareAccountID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := h.db.SetSetting("cloudflare_api_token", settings.CloudflareAPIToken); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	var notifiers []notifier.Notifier
 	if settings.DiscordWebhookURL != "" {
@@ -496,6 +515,10 @@ func (h *Handlers) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	h.notifiers = notifiers
 	h.engine.UpdateNotifiers(notifiers)
+
+	if h.snapshotService != nil && settings.CloudflareAccountID != "" && settings.CloudflareAPIToken != "" {
+		h.snapshotService.TriggerRefresh()
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(settings)
@@ -549,6 +572,94 @@ func (h *Handlers) TestGotify(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "Test notification sent successfully"})
+}
+
+func (h *Handlers) GetCheckSnapshot(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseInt(vars["id"], 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	snapshot, err := h.db.GetCheckSnapshot(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"check_id": id,
+	}
+	if snapshot != nil {
+		if snapshot.TakenAt != nil {
+			response["taken_at"] = snapshot.TakenAt
+		}
+		if snapshot.FilePath != "" {
+			response["url"] = fmt.Sprintf("/api/checks/%d/snapshot/image", id)
+		}
+		if snapshot.LastError != "" {
+			response["last_error"] = snapshot.LastError
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func (h *Handlers) GetCheckSnapshotImage(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseInt(vars["id"], 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	snapshot, err := h.db.GetCheckSnapshot(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if snapshot == nil || snapshot.FilePath == "" {
+		http.Error(w, "snapshot not found", http.StatusNotFound)
+		return
+	}
+
+	filePath := filepath.Clean(snapshot.FilePath)
+	if !filepath.IsAbs(filePath) {
+		filePath = filepath.Join(h.dataDir, filePath)
+	}
+
+	if _, statErr := os.Stat(filePath); statErr != nil {
+		http.Error(w, "snapshot not found", http.StatusNotFound)
+		return
+	}
+
+	http.ServeFile(w, r, filePath)
+}
+
+func (h *Handlers) TriggerCheckSnapshot(w http.ResponseWriter, r *http.Request) {
+	if h.snapshotService == nil {
+		http.Error(w, "snapshot service not available", http.StatusNotImplemented)
+		return
+	}
+
+	vars := mux.Vars(r)
+	id, err := strconv.ParseInt(vars["id"], 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.snapshotService.CaptureCheck(id); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 func (h *Handlers) GetTailscaleDevices(w http.ResponseWriter, r *http.Request) {

@@ -25,7 +25,7 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-type SettingsTab = 'general' | 'notifications' | 'tailscale' | 'api-keys' | 'passkeys';
+type SettingsTab = 'general' | 'notifications' | 'tailscale' | 'snapshots' | 'api-keys' | 'passkeys';
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const { data: settings, isLoading } = useSettings();
@@ -59,6 +59,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     { id: 'general', label: 'General' },
     { id: 'notifications', label: 'Notifications' },
     { id: 'tailscale', label: 'Tailscale' },
+    { id: 'snapshots', label: 'Snapshots' },
     { id: 'api-keys', label: 'API Keys' },
     { id: 'passkeys', label: 'Passkeys' },
   ];
@@ -118,6 +119,14 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 isSaving={updateSettings.isPending}
               />
             )}
+            {activeTab === 'snapshots' && (
+              <SnapshotsTab
+                formData={formData}
+                updateField={updateField}
+                onSave={handleSaveSettings}
+                isSaving={updateSettings.isPending}
+              />
+            )}
             {activeTab === 'api-keys' && <APIKeysTab />}
             {activeTab === 'passkeys' && <PasskeysTab />}
           </div>
@@ -145,6 +154,79 @@ function GeneralTab({ onSave, isSaving }: GeneralTabProps) {
       <div className="flex justify-end pt-4 border-t border-terminal-border">
         <Button
           onClick={onSave}
+          disabled={isSaving}
+          className="bg-terminal-green text-terminal-bg font-bold hover:opacity-90"
+        >
+          {isSaving ? <Spinner size="sm" /> : 'Save Settings'}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+interface SnapshotsTabProps {
+  formData: Partial<Settings>;
+  updateField: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
+  onSave: () => Promise<void>;
+  isSaving: boolean;
+}
+
+function SnapshotsTab({ formData, updateField, onSave, isSaving }: SnapshotsTabProps) {
+  const { showToast } = useToast();
+
+  const handleSave = async () => {
+    if (!formData.cloudflare_account_id || !formData.cloudflare_api_token) {
+      showToast('Enter Cloudflare account ID and API token', 'error');
+      return;
+    }
+    try {
+      await onSave();
+      showToast('Snapshot settings saved', 'success');
+    } catch {
+      showToast('Failed to save settings', 'error');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="text-xs text-terminal-muted mb-4">
+        Cloudflare Browser Rendering captures snapshots for monitors every 6 hours.
+        Screenshots are stored in the server data directory.
+      </div>
+
+      <div>
+        <label className="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">
+          Account ID
+        </label>
+        <Input
+          type="text"
+          value={formData.cloudflare_account_id || ''}
+          onChange={(e) => updateField('cloudflare_account_id', e.target.value)}
+          className="w-full bg-terminal-surface border-terminal-border text-terminal-text"
+          placeholder="Cloudflare account ID"
+        />
+      </div>
+
+      <div>
+        <label className="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">
+          API Token
+        </label>
+        <Input
+          type="password"
+          value={formData.cloudflare_api_token || ''}
+          onChange={(e) => updateField('cloudflare_api_token', e.target.value)}
+          className="w-full bg-terminal-surface border-terminal-border text-terminal-text"
+          placeholder="Token with Browser Rendering permission"
+        />
+      </div>
+
+      <div className="text-[10px] text-terminal-muted">
+        The dashboard will display the latest snapshot on the monitor details pane once captured.
+      </div>
+
+      <div className="flex justify-end pt-4 border-t border-terminal-border">
+        <Button
+          onClick={handleSave}
           disabled={isSaving}
           className="bg-terminal-green text-terminal-bg font-bold hover:opacity-90"
         >
