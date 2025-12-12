@@ -170,7 +170,7 @@ interface SnapshotsTabProps {
   isSaving: boolean;
 }
 
-function SnapshotsTab({ formData, updateField, onSave, isSaving }: SnapshotsTabProps) {
+function SnapshotsTab({ onSave, isSaving }: SnapshotsTabProps) {
   return (
     <div className="space-y-6">
       <div className="text-xs text-terminal-muted mb-4">
