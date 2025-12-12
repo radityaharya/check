@@ -233,37 +233,36 @@ func (d *TimescaleDB) initSchema() error {
 	DO $$ 
 	BEGIN
 		IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'timescaledb') THEN
-			-- Check if table is already a hypertable
+			-- Ensure primary key exists (required for hypertable)
+			-- If table already has data, TimescaleDB will handle the conversion
 			IF NOT EXISTS (
-				SELECT 1 FROM _timescaledb_catalog.hypertable 
-				WHERE hypertable_name = 'check_history'
+				SELECT 1 FROM pg_constraint 
+				WHERE conname = 'check_history_pkey'
 			) THEN
-				-- Ensure primary key exists (required for hypertable)
-				-- If table already has data, TimescaleDB will handle the conversion
-				IF NOT EXISTS (
-					SELECT 1 FROM pg_constraint 
-					WHERE conname = 'check_history_pkey'
-				) THEN
-					ALTER TABLE check_history ADD PRIMARY KEY (id, checked_at);
-				END IF;
-				
-				-- Convert to hypertable (works with existing tables and data)
-				BEGIN
-					PERFORM create_hypertable('check_history', 'checked_at', 
-						chunk_time_interval => INTERVAL '1 day',
-						if_not_exists => TRUE);
-				EXCEPTION
-					WHEN OTHERS THEN
-						-- If conversion fails (e.g., table already exists with different structure),
-						-- ensure at least primary key exists
-						IF NOT EXISTS (
-							SELECT 1 FROM pg_constraint 
-							WHERE conname = 'check_history_pkey'
-						) THEN
-							ALTER TABLE check_history ADD PRIMARY KEY (id);
-						END IF;
-				END;
+				ALTER TABLE check_history ADD PRIMARY KEY (id, checked_at);
 			END IF;
+			
+			-- Try to convert to hypertable (if_not_exists handles case where it's already a hypertable)
+			BEGIN
+				PERFORM create_hypertable('check_history', 'checked_at', 
+					chunk_time_interval => INTERVAL '1 day',
+					if_not_exists => TRUE);
+			EXCEPTION
+				WHEN OTHERS THEN
+					-- If conversion fails (e.g., already a hypertable or incompatible structure),
+					-- ensure at least primary key exists
+					IF NOT EXISTS (
+						SELECT 1 FROM pg_constraint 
+						WHERE conname = 'check_history_pkey'
+					) THEN
+						BEGIN
+							ALTER TABLE check_history ADD PRIMARY KEY (id, checked_at);
+						EXCEPTION
+							WHEN OTHERS THEN
+								ALTER TABLE check_history ADD PRIMARY KEY (id);
+						END;
+					END IF;
+			END;
 		ELSE
 			-- Not TimescaleDB, ensure regular primary key exists
 			IF NOT EXISTS (
@@ -274,14 +273,19 @@ func (d *TimescaleDB) initSchema() error {
 			END IF;
 		END IF;
 	EXCEPTION
-		WHEN undefined_table THEN
-			-- TimescaleDB catalog not available, skip hypertable creation
-			IF NOT EXISTS (
-				SELECT 1 FROM pg_constraint 
-				WHERE conname = 'check_history_pkey'
-			) THEN
-				ALTER TABLE check_history ADD PRIMARY KEY (id);
-			END IF;
+		WHEN OTHERS THEN
+			-- If anything fails, ensure at least a basic primary key exists
+			BEGIN
+				IF NOT EXISTS (
+					SELECT 1 FROM pg_constraint 
+					WHERE conname = 'check_history_pkey'
+				) THEN
+					ALTER TABLE check_history ADD PRIMARY KEY (id);
+				END IF;
+			EXCEPTION
+				WHEN OTHERS THEN
+					NULL;
+			END;
 	END $$;
 
 	-- Add new columns if they don't exist (for migrations)
