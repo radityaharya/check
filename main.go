@@ -184,7 +184,25 @@ func main() {
 	router.HandleFunc("/api/tags/{id}", authManager.OptionalAuth(handlers.UpdateTag)).Methods("PUT")
 	router.HandleFunc("/api/tags/{id}", authManager.OptionalAuth(handlers.DeleteTag)).Methods("DELETE")
 
-	router.PathPrefix("/").Handler(http.FileServer(http.Dir("./web/")))
+	// Serve static files from web/dist (built frontend)
+	// In development, run the Vite dev server separately
+	webDir := "./web/dist"
+	if _, err := os.Stat(webDir); os.IsNotExist(err) {
+		webDir = "./web" // Fallback for development
+	}
+	
+	// SPA fallback - serve index.html for any non-API, non-file routes
+	fs := http.FileServer(http.Dir(webDir))
+	router.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Try to serve the file directly
+		path := webDir + r.URL.Path
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			// File doesn't exist, serve index.html for SPA routing
+			http.ServeFile(w, r, webDir+"/index.html")
+			return
+		}
+		fs.ServeHTTP(w, r)
+	})
 
 	addr := ":" + config.Server.Port
 	log.Printf("Server starting on http://localhost%s", addr)
