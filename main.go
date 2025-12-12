@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -12,10 +13,13 @@ import (
 	"gocheck/internal/auth"
 	"gocheck/internal/checker"
 	"gocheck/internal/db"
+	grpc_server "gocheck/internal/grpc"
 	"gocheck/internal/notifier"
 	"gocheck/internal/snapshot"
+	"gocheck/proto/pb"
 
 	"github.com/gorilla/mux"
+	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 )
 
@@ -24,8 +28,9 @@ type Config struct {
 		Port string `yaml:"port"`
 	} `yaml:"server"`
 	Database struct {
-		Path string `yaml:"path"`
-		URL  string `yaml:"url"`
+		Path      string `yaml:"path"`
+		URL       string `yaml:"url"`
+		Timescale bool   `yaml:"timescale"`
 	} `yaml:"database"`
 }
 
@@ -83,11 +88,12 @@ func main() {
 	// Initialize database (PostgreSQL, TimescaleDB, or SQLite based on config)
 	var database *db.Database
 	if config.Database.URL != "" {
-		database, err = db.NewDatabaseWithURL(config.Database.URL, config.Database.Path)
+		useTimescale := config.Database.Timescale || os.Getenv("USE_TIMESCALE") == "true" || strings.Contains(config.Database.URL, "timescale")
+		database, err = db.NewDatabaseWithURLOptions(config.Database.URL, config.Database.Path, useTimescale)
 		if err != nil {
 			log.Fatalf("Failed to initialize database: %v", err)
 		}
-		if os.Getenv("USE_TIMESCALE") == "true" || strings.Contains(config.Database.URL, "timescale") {
+		if useTimescale {
 			log.Printf("Using TimescaleDB database")
 		} else {
 			log.Printf("Using PostgreSQL database")
@@ -119,6 +125,8 @@ func main() {
 	}
 
 	engine := checker.NewEngine(database, notifiers)
+	sentinelServer := grpc_server.NewSentinelServerWithEngine(database, engine)
+	engine.SetSentinelServer(sentinelServer)
 
 	if err := engine.Start(); err != nil {
 		log.Fatalf("Failed to start check engine: %v", err)
@@ -129,7 +137,7 @@ func main() {
 	snapshotService.Start()
 	defer snapshotService.Stop()
 
-	handlers := api.NewHandlers(database, engine, notifiers, snapshotService, dataDir)
+	handlers := api.NewHandlers(database, engine, notifiers, snapshotService, dataDir, sentinelServer)
 	authManager := auth.NewAuthManager(database)
 
 	rpID := os.Getenv("WEBAUTHN_RP_ID")
@@ -147,6 +155,23 @@ func main() {
 	}
 
 	auth.SetGlobalManagers(authManager, webAuthnManager)
+
+	go func() {
+		grpcPort := os.Getenv("GRPC_PORT")
+		if grpcPort == "" {
+			grpcPort = "50051"
+		}
+		lis, err := net.Listen("tcp", ":"+grpcPort)
+		if err != nil {
+			log.Fatalf("Failed to listen on gRPC port %s: %v", grpcPort, err)
+		}
+		s := grpc.NewServer()
+		pb.RegisterSentinelServer(s, sentinelServer)
+		log.Printf("gRPC server starting on :%s", grpcPort)
+		if err := s.Serve(lis); err != nil {
+			log.Fatalf("Failed to serve gRPC: %v", err)
+		}
+	}()
 
 	router := mux.NewRouter()
 
@@ -176,10 +201,12 @@ func main() {
 	router.HandleFunc("/api/checks/{id}", authManager.OptionalAuth(handlers.UpdateCheck)).Methods("PUT")
 	router.HandleFunc("/api/checks/{id}", authManager.OptionalAuth(handlers.DeleteCheck)).Methods("DELETE")
 	router.HandleFunc("/api/checks/{id}/history", authManager.OptionalAuth(handlers.GetCheckHistory)).Methods("GET")
+	router.HandleFunc("/api/checks/{id}/stats", authManager.OptionalAuth(handlers.GetCheckStats)).Methods("GET")
 	router.HandleFunc("/api/checks/{id}/snapshot", authManager.OptionalAuth(handlers.GetCheckSnapshot)).Methods("GET")
 	router.HandleFunc("/api/checks/{id}/snapshot/image", authManager.OptionalAuth(handlers.GetCheckSnapshotImage)).Methods("GET")
 	router.HandleFunc("/api/checks/{id}/snapshot/trigger", authManager.OptionalAuth(handlers.TriggerCheckSnapshot)).Methods("POST")
 	router.HandleFunc("/api/checks/{id}/trigger", authManager.OptionalAuth(handlers.TriggerCheck)).Methods("POST")
+	router.HandleFunc("/api/checks/{id}/trigger/{region}", authManager.OptionalAuth(handlers.TriggerCheckForRegion)).Methods("POST")
 	router.HandleFunc("/api/checks/grouped", authManager.OptionalAuth(handlers.GetGroupedChecks)).Methods("GET")
 	router.HandleFunc("/api/stream/updates", authManager.OptionalAuth(handlers.StreamCheckUpdates)).Methods("GET")
 	router.HandleFunc("/api/stats", authManager.OptionalAuth(handlers.GetStats)).Methods("GET")
@@ -197,6 +224,10 @@ func main() {
 	router.HandleFunc("/api/tags", authManager.OptionalAuth(handlers.CreateTag)).Methods("POST")
 	router.HandleFunc("/api/tags/{id}", authManager.OptionalAuth(handlers.UpdateTag)).Methods("PUT")
 	router.HandleFunc("/api/tags/{id}", authManager.OptionalAuth(handlers.DeleteTag)).Methods("DELETE")
+	router.HandleFunc("/api/probes", authManager.OptionalAuth(handlers.GetProbes)).Methods("GET")
+	router.HandleFunc("/api/probes", authManager.OptionalAuth(handlers.CreateProbe)).Methods("POST")
+	router.HandleFunc("/api/probes/{id}", authManager.OptionalAuth(handlers.DeleteProbe)).Methods("DELETE")
+	router.HandleFunc("/api/probes/{id}/regenerate-token", authManager.OptionalAuth(handlers.RegenerateProbeToken)).Methods("POST")
 
 	// Serve static files from web/dist (built frontend)
 	// In development, run the Vite dev server separately

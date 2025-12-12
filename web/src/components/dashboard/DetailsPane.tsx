@@ -7,12 +7,14 @@ import { formatDate, getCheckTarget, getCheckTypeClass } from '@/lib/helpers';
 import { useToast } from '@/components/ui/toast';
 import {
   useTriggerCheck,
+  useTriggerCheckForRegion,
   useToggleCheckEnabled,
   useDeleteCheck,
   useCheckHistory,
+  useCheckStats,
 } from '@/hooks';
 import { useTimeAgoTick, formatTimeAgo } from '@/hooks/use-time-ago';
-import type { Check, CheckStatus, TimeRange } from '@/types';
+import type { Check, CheckStatus, RegionStats, TimeRange } from '@/types';
 import { useTriggerSnapshot } from '@/hooks/use-checks';
 
 interface DetailsPaneProps {
@@ -32,7 +34,9 @@ export function DetailsPane({
 }: DetailsPaneProps) {
   const { showToast } = useToast();
   const { data: history = [], isLoading: isLoadingHistory } = useCheckHistory(check?.id ?? null, timeRange);
+  const { data: stats, isLoading: isLoadingStats } = useCheckStats(check?.id ?? null, timeRange);
   const triggerMutation = useTriggerCheck();
+  const triggerRegionMutation = useTriggerCheckForRegion();
   const toggleEnabledMutation = useToggleCheckEnabled();
   const deleteMutation = useDeleteCheck();
   const snapshotMutation = useTriggerSnapshot();
@@ -95,10 +99,14 @@ export function DetailsPane({
     }
   };
 
-  const uptimePercent = calculateUptime(history);
-  const avgLatency = calculateAvgLatency(history);
-  const downCount = history.filter((h) => !h.success).length;
-  const percentileLatency = calculatePercentiles(history);
+  const uptimePercent = stats ? `${stats.success_rate.toFixed(2)}%` : calculateUptime(history);
+  const avgLatency = stats ? `${stats.avg_latency}ms` : calculateAvgLatency(history);
+  const downCount = stats ? stats.down_count : history.filter((h) => h && !h.success).length;
+  const percentileLatency = stats 
+    ? { p90: `${stats.p90_latency}ms`, p99: `${stats.p99_latency}ms` }
+    : calculatePercentiles(history);
+  
+  const regions = stats?.regions || [];
 
   useEffect(() => {
     if (!check) {
@@ -290,7 +298,7 @@ export function DetailsPane({
             <div className="text-xs text-terminal-muted uppercase tracking-widest mb-3">
               Stats
             </div>
-            {isLoadingHistory ? (
+            {isLoadingHistory || isLoadingStats ? (
               <div className="grid grid-cols-2 gap-3">
                 <StatBoxSkeleton />
                 <StatBoxSkeleton />
@@ -301,13 +309,98 @@ export function DetailsPane({
               <div className="grid grid-cols-2 gap-3">
                 <StatBox label="uptime" value={uptimePercent} />
                 <StatBox label="avg latency" value={avgLatency} />
-                <StatBox label="checks" value={String(history.length)} />
+                <StatBox label="checks" value={stats ? String(stats.total_checks) : String(history.length)} />
                 <StatBox label="down" value={String(downCount)} />
                 <StatBox label="p90 latency" value={percentileLatency.p90} />
                 <StatBox label="p99 latency" value={percentileLatency.p99} />
               </div>
             )}
           </div>
+
+          {/* Region Breakdown */}
+          {regions.length > 0 && (
+            <div className="p-6 border-b border-terminal-border">
+              <div className="text-xs text-terminal-muted uppercase tracking-widest mb-3">
+                Regions ({regions.length})
+              </div>
+              {isLoadingStats ? (
+                <div className="space-y-2">
+                  {[...Array(regions.length)].map((_, i) => (
+                    <div key={i} className="h-10 bg-terminal-bg rounded border border-terminal-border animate-pulse" />
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {regions.map((regionStats: RegionStats) => (
+                    <div
+                      key={regionStats.region}
+                      className="flex items-center justify-between p-2 bg-terminal-bg rounded border border-terminal-border"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2">
+                          {regionStats.is_up !== undefined && (
+                            <div
+                              className={cn(
+                                'w-2 h-2 rounded-full',
+                                regionStats.is_up ? 'bg-terminal-green' : 'bg-terminal-red'
+                              )}
+                              title={regionStats.is_up ? 'Up' : 'Down'}
+                            />
+                          )}
+                          <span className="text-xs font-semibold text-terminal-text">{regionStats.region}</span>
+                        </div>
+                        <span className="text-[10px] text-terminal-muted">
+                          {regionStats.success_count}/{regionStats.total_checks}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs">
+                        <span
+                          className={cn(
+                            regionStats.success_rate >= 99
+                              ? 'text-terminal-green'
+                              : regionStats.success_rate >= 95
+                              ? 'text-terminal-yellow'
+                              : 'text-terminal-red'
+                          )}
+                        >
+                          {regionStats.success_rate.toFixed(1)}%
+                        </span>
+                        <span className="text-terminal-muted font-mono">
+                          {regionStats.avg_latency}ms
+                        </span>
+                        {regionStats.last_checked_at && (
+                          <span className="text-terminal-muted text-[10px]">
+                            {formatTimeAgo(regionStats.last_checked_at)}
+                          </span>
+                        )}
+                        {check && check.enabled && (
+                          <button
+                            onClick={async () => {
+                              if (!check) return;
+                              try {
+                                await triggerRegionMutation.mutateAsync({
+                                  checkId: check.id,
+                                  region: regionStats.region,
+                                });
+                                showToast(`Check triggered for ${regionStats.region}`, 'success');
+                              } catch {
+                                showToast(`Failed to trigger check for ${regionStats.region}`, 'error');
+                              }
+                            }}
+                            disabled={triggerRegionMutation.isPending}
+                            className="text-[10px] bg-terminal-green/20 hover:bg-terminal-green/30 text-terminal-green px-2 py-0.5 rounded uppercase tracking-wide disabled:opacity-50"
+                            title={`Trigger check for ${regionStats.region}`}
+                          >
+                            {triggerRegionMutation.isPending ? '...' : 'check'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Status Bar */}
           <div className="p-6 border-b border-terminal-border">
@@ -349,6 +442,7 @@ export function DetailsPane({
                       <th className="p-2">time</th>
                       <th className="p-2">status</th>
                       <th className="p-2">latency</th>
+                      {regions.length > 0 && <th className="p-2">region</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-terminal-border text-terminal-text">
@@ -370,6 +464,17 @@ export function DetailsPane({
                         <td className="p-2 text-terminal-muted">
                           {item.response_time_ms || 0}ms
                         </td>
+                        {regions.length > 0 && (
+                          <td className="p-2">
+                            {item.region ? (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-terminal-cyan/20 text-terminal-cyan">
+                                {item.region}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-terminal-muted">—</span>
+                            )}
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -429,6 +534,15 @@ export function DetailsPane({
                       <span className="text-terminal-text">
                         {entry.response_time_ms || 0}ms
                       </span>
+                      {entry.region && (
+                        <>
+                          <span className="text-terminal-muted mx-2">|</span>
+                          region:{' '}
+                          <span className="text-terminal-text">
+                            {entry.region}
+                          </span>
+                        </>
+                      )}
                       <span className="text-terminal-muted mx-2">|</span>
                       status:{' '}
                       <span className="text-terminal-text">
@@ -451,65 +565,76 @@ export function DetailsPane({
   );
 }
 
-function StatBox({ label, value }: { label: string; value: string }) {
+function StatBox({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="bg-terminal-bg border border-terminal-border rounded p-3">
-      <div className="text-[10px] text-terminal-muted uppercase tracking-widest">
+    <div className="bg-terminal-bg border border-terminal-border rounded p-2">
+      <div className="text-[10px] uppercase text-terminal-muted tracking-widest mb-1">
         {label}
       </div>
-      <div className="text-lg font-bold">{value}</div>
+      <div className="text-sm font-bold text-terminal-text">{value}</div>
     </div>
   );
 }
 
 function StatBoxSkeleton() {
   return (
-    <div className="bg-terminal-bg border border-terminal-border rounded p-3 animate-pulse">
-      <div className="h-3 w-12 bg-terminal-border rounded mb-2" />
-      <div className="h-6 w-16 bg-terminal-border rounded" />
+    <div className="bg-terminal-bg border border-terminal-border rounded p-2">
+      <div className="h-3 w-16 bg-terminal-border/30 rounded mb-2 animate-pulse" />
+      <div className="h-4 w-12 bg-terminal-border/30 rounded animate-pulse" />
     </div>
   );
 }
 
 function computeStatusTransitions(history: CheckStatus[]): CheckStatus[] {
+  if (history.length === 0) return [];
+  
   const transitions: CheckStatus[] = [];
-  for (let i = 0; i < history.length; i++) {
-    const current = history[i];
-    const prev = history[i + 1];
-    if (!prev || current.success !== prev.success) {
-      transitions.push(current);
+  let lastStatus: boolean | null = null;
+  
+  for (const entry of history) {
+    if (!entry) continue;
+    if (lastStatus === null || entry.success !== lastStatus) {
+      transitions.push(entry);
+      lastStatus = entry.success;
     }
   }
+  
   return transitions;
 }
 
 function calculateUptime(history: CheckStatus[]): string {
-  if (history.length === 0) return '—';
-  const up = history.filter((h) => h.success).length;
-  return ((up / history.length) * 100).toFixed(2) + '%';
+  if (history.length === 0) return '0%';
+  
+  const successCount = history.filter((h) => h && h.success).length;
+  const uptimePercent = (successCount / history.length) * 100;
+  
+  return `${uptimePercent.toFixed(2)}%`;
 }
 
 function calculateAvgLatency(history: CheckStatus[]): string {
-  const data = history.filter((h) => typeof h.response_time_ms === 'number');
-  if (data.length === 0) return '—';
-  const sum = data.reduce((acc, h) => acc + (h.response_time_ms || 0), 0);
-  return Math.round(sum / data.length) + 'ms';
+  if (history.length === 0) return '0ms';
+  
+  const validHistory = history.filter((h) => h);
+  if (validHistory.length === 0) return '0ms';
+  
+  const totalLatency = validHistory.reduce((sum, h) => sum + (h.response_time_ms || 0), 0);
+  const avgLatency = Math.round(totalLatency / validHistory.length);
+  
+  return `${avgLatency}ms`;
 }
 
 function calculatePercentiles(history: CheckStatus[]): { p90: string; p99: string } {
-  const values = history
-    .map((h) => h.response_time_ms || 0)
-    .filter((v) => v > 0)
-    .sort((a, b) => a - b);
-  if (values.length === 0) {
-    return { p90: '—', p99: '—' };
-  }
-  const pick = (p: number) => {
-    const idx = Math.min(values.length - 1, Math.floor((p / 100) * values.length));
-    return `${values[idx]}ms`;
-  };
+  if (history.length === 0) return { p90: '0ms', p99: '0ms' };
+  
+  const validHistory = history.filter((h) => h);
+  if (validHistory.length === 0) return { p90: '0ms', p99: '0ms' };
+  
+  const latencies = validHistory.map((h) => h.response_time_ms || 0).sort((a, b) => a - b);
+  const p90Index = Math.ceil(latencies.length * 0.9) - 1;
+  const p99Index = Math.ceil(latencies.length * 0.99) - 1;
+  
   return {
-    p90: pick(90),
-    p99: pick(99),
+    p90: `${latencies[p90Index] || 0}ms`,
+    p99: `${latencies[p99Index] || 0}ms`,
   };
 }

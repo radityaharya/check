@@ -73,6 +73,8 @@ export interface CheckStatus {
   response_body?: string;
   actual_value?: string;
   checked_at: string;
+  probe_id?: number;
+  region?: string;
 }
 
 export interface CheckGroup {
@@ -102,6 +104,29 @@ export interface Stats {
   active_checks: number;
   up_checks: number;
   total_uptime: number;
+}
+
+export interface RegionStats {
+  region: string;
+  total_checks: number;
+  success_count: number;
+  success_rate: number;
+  avg_latency: number;
+  total_latency: number;
+  is_up?: boolean;
+  last_checked_at?: string;
+}
+
+export interface CheckStats {
+  check_id: number;
+  total_checks: number;
+  success_count: number;
+  success_rate: number;
+  avg_latency: number;
+  p90_latency: number;
+  p99_latency: number;
+  down_count: number;
+  regions: RegionStats[];
 }
 
 export interface Settings {
@@ -223,6 +248,29 @@ export interface GroupFormData {
 export interface TagFormData {
   name: string;
   color: string;
+}
+
+export interface Probe {
+  id: number;
+  region_code: string;
+  ip_address?: string;
+  version?: string;
+  status: 'ONLINE' | 'OFFLINE';
+  last_seen_at?: string;
+}
+
+export interface CreateProbeRequest {
+  region_code: string;
+  ip_address?: string;
+}
+
+export interface CreateProbeResponse {
+  probe: Probe;
+  token: string;
+}
+
+export interface RegenerateTokenResponse {
+  token: string;
 }
 
 export type TimeRange = '15m' | '30m' | '60m' | '1d' | '30d';

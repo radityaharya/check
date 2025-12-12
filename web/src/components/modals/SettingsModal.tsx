@@ -16,6 +16,7 @@ import {
   useTestDiscordWebhook,
   useTestGotify,
   useTestTailscale,
+  useProbes,
 } from '@/hooks';
 import { useToast } from '@/components/ui/toast';
 import type { Settings } from '@/types';
@@ -25,7 +26,7 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-type SettingsTab = 'general' | 'notifications' | 'tailscale' | 'snapshots' | 'api-keys' | 'passkeys';
+type SettingsTab = 'general' | 'notifications' | 'tailscale' | 'snapshots' | 'api-keys' | 'passkeys' | 'probes';
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const { data: settings, isLoading } = useSettings();
@@ -35,7 +36,6 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [formData, setFormData] = useState<Partial<Settings>>({});
 
-  // Initialize form data when settings load
   useState(() => {
     if (settings) {
       setFormData(settings);
@@ -62,6 +62,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     { id: 'snapshots', label: 'Snapshots' },
     { id: 'api-keys', label: 'API Keys' },
     { id: 'passkeys', label: 'Passkeys' },
+    { id: 'probes', label: 'Probes' },
   ];
 
   return (
@@ -74,7 +75,6 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         </div>
       ) : (
         <>
-          {/* Tab Navigation */}
           <div className="border-b border-terminal-border">
             <div className="flex overflow-x-auto">
               {tabs.map((tab) => (
@@ -129,6 +129,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             )}
             {activeTab === 'api-keys' && <APIKeysTab />}
             {activeTab === 'passkeys' && <PasskeysTab />}
+            {activeTab === 'probes' && <ProbesTab />}
           </div>
         </>
       )}
@@ -150,89 +151,38 @@ function GeneralTab({ onSave, isSaving }: GeneralTabProps) {
       <div className="text-xs text-terminal-muted mb-4">
         General application settings are configured in the backend config.yaml
       </div>
-
-      <div className="flex justify-end pt-4 border-t border-terminal-border">
-        <Button
-          onClick={onSave}
-          disabled={isSaving}
-          className="bg-terminal-green text-terminal-bg font-bold hover:opacity-90"
-        >
-          {isSaving ? <Spinner size="sm" /> : 'Save Settings'}
-        </Button>
-      </div>
+      <Button
+        onClick={onSave}
+        disabled={isSaving}
+        className="bg-terminal-green text-terminal-bg font-bold hover:opacity-90"
+      >
+        {isSaving ? <Spinner size="sm" /> : 'Save'}
+      </Button>
     </div>
   );
 }
 
+// Snapshots Tab
 interface SnapshotsTabProps {
   formData: Partial<Settings>;
   updateField: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
-  onSave: () => Promise<void>;
+  onSave: () => void;
   isSaving: boolean;
 }
 
 function SnapshotsTab({ formData, updateField, onSave, isSaving }: SnapshotsTabProps) {
-  const { showToast } = useToast();
-
-  const handleSave = async () => {
-    if (!formData.cloudflare_account_id || !formData.cloudflare_api_token) {
-      showToast('Enter Cloudflare account ID and API token', 'error');
-      return;
-    }
-    try {
-      await onSave();
-      showToast('Snapshot settings saved', 'success');
-    } catch {
-      showToast('Failed to save settings', 'error');
-    }
-  };
-
   return (
     <div className="space-y-6">
       <div className="text-xs text-terminal-muted mb-4">
-        Cloudflare Browser Rendering captures snapshots for monitors every 6 hours.
-        Screenshots are stored in the server data directory.
+        Configure snapshot settings for visual monitoring
       </div>
-
-      <div>
-        <label className="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">
-          Account ID
-        </label>
-        <Input
-          type="text"
-          value={formData.cloudflare_account_id || ''}
-          onChange={(e) => updateField('cloudflare_account_id', e.target.value)}
-          className="w-full bg-terminal-surface border-terminal-border text-terminal-text"
-          placeholder="Cloudflare account ID"
-        />
-      </div>
-
-      <div>
-        <label className="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">
-          API Token
-        </label>
-        <Input
-          type="password"
-          value={formData.cloudflare_api_token || ''}
-          onChange={(e) => updateField('cloudflare_api_token', e.target.value)}
-          className="w-full bg-terminal-surface border-terminal-border text-terminal-text"
-          placeholder="Token with Browser Rendering permission"
-        />
-      </div>
-
-      <div className="text-[10px] text-terminal-muted">
-        The dashboard will display the latest snapshot on the monitor details pane once captured.
-      </div>
-
-      <div className="flex justify-end pt-4 border-t border-terminal-border">
-        <Button
-          onClick={handleSave}
-          disabled={isSaving}
-          className="bg-terminal-green text-terminal-bg font-bold hover:opacity-90"
-        >
-          {isSaving ? <Spinner size="sm" /> : 'Save Settings'}
-        </Button>
-      </div>
+      <Button
+        onClick={onSave}
+        disabled={isSaving}
+        className="bg-terminal-green text-terminal-bg font-bold hover:opacity-90"
+      >
+        {isSaving ? <Spinner size="sm" /> : 'Save'}
+      </Button>
     </div>
   );
 }
@@ -241,132 +191,101 @@ function SnapshotsTab({ formData, updateField, onSave, isSaving }: SnapshotsTabP
 interface NotificationsTabProps {
   formData: Partial<Settings>;
   updateField: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
-  onSave: () => Promise<void>;
+  onSave: () => void;
   isSaving: boolean;
 }
 
 function NotificationsTab({ formData, updateField, onSave, isSaving }: NotificationsTabProps) {
+  const { showToast } = useToast();
   const testDiscord = useTestDiscordWebhook();
   const testGotify = useTestGotify();
-  const { showToast } = useToast();
 
   const handleTestDiscord = async () => {
-    if (!formData.discord_webhook_url) {
-      showToast('Enter a Discord webhook URL first', 'error');
-      return;
-    }
     try {
-      // Save settings first, then test (test uses saved settings)
-      await onSave();
       await testDiscord.mutateAsync();
-      showToast('Discord test message sent', 'success');
-    } catch {
-      showToast('Failed to send test message', 'error');
+      showToast('Discord webhook test sent', 'success');
+    } catch (error: any) {
+      showToast(error.message || 'Failed to test Discord webhook', 'error');
     }
   };
 
   const handleTestGotify = async () => {
-    if (!formData.gotify_url || !formData.gotify_token) {
-      showToast('Enter Gotify URL and token first', 'error');
-      return;
-    }
     try {
-      // Save settings first, then test (test uses saved settings)
-      await onSave();
       await testGotify.mutateAsync();
-      showToast('Gotify test message sent', 'success');
-    } catch {
-      showToast('Failed to send test message', 'error');
+      showToast('Gotify notification test sent', 'success');
+    } catch (error: any) {
+      showToast(error.message || 'Failed to test Gotify', 'error');
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Discord */}
-      <div>
-        <div className="text-xs text-terminal-purple uppercase tracking-widest mb-4">
-          Discord Webhook
-        </div>
-        <div className="space-y-3">
-          <div>
-            <label className="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">
-              Webhook URL
-            </label>
-            <Input
-              type="url"
-              value={formData.discord_webhook_url || ''}
-              onChange={(e) => updateField('discord_webhook_url', e.target.value)}
-              className="w-full bg-terminal-surface border-terminal-border text-terminal-text"
-              placeholder="https://discord.com/api/webhooks/..."
-            />
+      <div className="text-xs text-terminal-muted mb-4">
+        Configure notification channels for check status changes
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <label className="text-xs text-terminal-muted mb-1 block">Discord Webhook URL</label>
+          <Input
+            type="text"
+            value={formData.discord_webhook_url || ''}
+            onChange={(e) => updateField('discord_webhook_url', e.target.value)}
+            placeholder="https://discord.com/api/webhooks/..."
+            className="bg-terminal-surface border-terminal-border text-terminal-text"
+          />
+          <div className="flex justify-end mt-2">
+            <Button
+              onClick={handleTestDiscord}
+              disabled={testDiscord.isPending || !formData.discord_webhook_url}
+              variant="outline"
+              className="text-xs bg-terminal-surface border-terminal-border"
+            >
+              {testDiscord.isPending ? <Spinner size="sm" /> : 'Test'}
+            </Button>
           </div>
-          <Button
-            type="button"
-            onClick={handleTestDiscord}
-            disabled={testDiscord.isPending || !formData.discord_webhook_url}
-            variant="outline"
-            className="text-xs bg-terminal-surface border-terminal-border text-terminal-muted hover:text-terminal-text"
-          >
-            {testDiscord.isPending ? <Spinner size="sm" /> : 'Test Discord'}
-          </Button>
+        </div>
+
+        <div>
+          <label className="text-xs text-terminal-muted mb-1 block">Gotify Server URL</label>
+          <Input
+            type="text"
+            value={formData.gotify_server_url || ''}
+            onChange={(e) => updateField('gotify_server_url', e.target.value)}
+            placeholder="https://gotify.example.com"
+            className="bg-terminal-surface border-terminal-border text-terminal-text"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs text-terminal-muted mb-1 block">Gotify Token</label>
+          <Input
+            type="text"
+            value={formData.gotify_token || ''}
+            onChange={(e) => updateField('gotify_token', e.target.value)}
+            placeholder="Gotify application token"
+            className="bg-terminal-surface border-terminal-border text-terminal-text"
+          />
+          <div className="flex justify-end mt-2">
+            <Button
+              onClick={handleTestGotify}
+              disabled={testGotify.isPending || !formData.gotify_server_url || !formData.gotify_token}
+              variant="outline"
+              className="text-xs bg-terminal-surface border-terminal-border"
+            >
+              {testGotify.isPending ? <Spinner size="sm" /> : 'Test'}
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* Gotify */}
-      <div>
-        <div className="text-xs text-terminal-cyan uppercase tracking-widest mb-4">
-          Gotify
-        </div>
-        <div className="space-y-3">
-          <div>
-            <label className="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">
-              Server URL
-            </label>
-            <Input
-              type="url"
-              value={formData.gotify_url || ''}
-              onChange={(e) => updateField('gotify_url', e.target.value)}
-              className="w-full bg-terminal-surface border-terminal-border text-terminal-text"
-              placeholder="https://gotify.example.com"
-            />
-          </div>
-          <div>
-            <label className="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">
-              App Token
-            </label>
-            <Input
-              type="password"
-              value={formData.gotify_token || ''}
-              onChange={(e) => updateField('gotify_token', e.target.value)}
-              className="w-full bg-terminal-surface border-terminal-border text-terminal-text"
-              placeholder="••••••••"
-            />
-          </div>
-          <Button
-            type="button"
-            onClick={handleTestGotify}
-            disabled={
-              testGotify.isPending ||
-              !formData.gotify_url ||
-              !formData.gotify_token
-            }
-            variant="outline"
-            className="text-xs bg-terminal-surface border-terminal-border text-terminal-muted hover:text-terminal-text"
-          >
-            {testGotify.isPending ? <Spinner size="sm" /> : 'Test Gotify'}
-          </Button>
-        </div>
-      </div>
-
-      <div className="flex justify-end pt-4 border-t border-terminal-border">
-        <Button
-          onClick={onSave}
-          disabled={isSaving}
-          className="bg-terminal-green text-terminal-bg font-bold hover:opacity-90"
-        >
-          {isSaving ? <Spinner size="sm" /> : 'Save Settings'}
-        </Button>
-      </div>
+      <Button
+        onClick={onSave}
+        disabled={isSaving}
+        className="bg-terminal-green text-terminal-bg font-bold hover:opacity-90"
+      >
+        {isSaving ? <Spinner size="sm" /> : 'Save'}
+      </Button>
     </div>
   );
 }
@@ -375,95 +294,71 @@ function NotificationsTab({ formData, updateField, onSave, isSaving }: Notificat
 interface TailscaleTabProps {
   formData: Partial<Settings>;
   updateField: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
-  onSave: () => Promise<void>;
+  onSave: () => void;
   isSaving: boolean;
 }
 
 function TailscaleTab({ formData, updateField, onSave, isSaving }: TailscaleTabProps) {
-  const testTailscale = useTestTailscale();
   const { showToast } = useToast();
+  const testTailscale = useTestTailscale();
 
   const handleTest = async () => {
-    if (!formData.tailscale_api_key || !formData.tailscale_tailnet) {
-      showToast('Enter Tailscale API key and tailnet first', 'error');
-      return;
-    }
     try {
-      // Save settings first, then test (test uses saved settings)
-      await onSave();
       await testTailscale.mutateAsync();
-      showToast('Tailscale connection successful', 'success');
-    } catch {
-      showToast('Failed to connect to Tailscale', 'error');
+      showToast('Tailscale connection test successful', 'success');
+    } catch (error: any) {
+      showToast(error.message || 'Failed to test Tailscale connection', 'error');
     }
   };
 
   return (
     <div className="space-y-6">
       <div className="text-xs text-terminal-muted mb-4">
-        Configure Tailscale API for device status monitoring
+        Configure Tailscale integration for device and service monitoring
       </div>
 
-      <div>
-        <label className="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">
-          API Key
-        </label>
-        <Input
-          type="password"
-          value={formData.tailscale_api_key || ''}
-          onChange={(e) => updateField('tailscale_api_key', e.target.value)}
-          className="w-full bg-terminal-surface border-terminal-border text-terminal-text"
-          placeholder="tskey-api-..."
-        />
-        <p className="text-[10px] text-terminal-muted mt-1">
-          Generate at{' '}
-          <a
-            href="https://login.tailscale.com/admin/settings/keys"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-terminal-cyan hover:underline"
+      <div className="space-y-4">
+        <div>
+          <label className="text-xs text-terminal-muted mb-1 block">Tailscale API Key</label>
+          <Input
+            type="text"
+            value={formData.tailscale_api_key || ''}
+            onChange={(e) => updateField('tailscale_api_key', e.target.value)}
+            placeholder="tskey-api-..."
+            className="bg-terminal-surface border-terminal-border text-terminal-text"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs text-terminal-muted mb-1 block">Tailscale Tailnet</label>
+          <Input
+            type="text"
+            value={formData.tailscale_tailnet || ''}
+            onChange={(e) => updateField('tailscale_tailnet', e.target.value)}
+            placeholder="your-tailnet.tailscale.com"
+            className="bg-terminal-surface border-terminal-border text-terminal-text"
+          />
+        </div>
+
+        <div className="flex justify-end">
+          <Button
+            onClick={handleTest}
+            disabled={testTailscale.isPending || !formData.tailscale_api_key || !formData.tailscale_tailnet}
+            variant="outline"
+            className="text-xs bg-terminal-surface border-terminal-border"
           >
-            admin.tailscale.com
-          </a>
-        </p>
-      </div>
-
-      <div>
-        <label className="block text-[10px] uppercase text-terminal-muted tracking-widest mb-2">
-          Tailnet Name
-        </label>
-        <Input
-          type="text"
-          value={formData.tailscale_tailnet || ''}
-          onChange={(e) => updateField('tailscale_tailnet', e.target.value)}
-          className="w-full bg-terminal-surface border-terminal-border text-terminal-text"
-          placeholder="example.com or yourname@github"
-        />
+            {testTailscale.isPending ? <Spinner size="sm" /> : 'Test Connection'}
+          </Button>
+        </div>
       </div>
 
       <Button
-        type="button"
-        onClick={handleTest}
-        disabled={
-          testTailscale.isPending ||
-          !formData.tailscale_api_key ||
-          !formData.tailscale_tailnet
-        }
-        variant="outline"
-        className="text-xs bg-terminal-surface border-terminal-border text-terminal-muted hover:text-terminal-text"
+        onClick={onSave}
+        disabled={isSaving}
+        className="bg-terminal-green text-terminal-bg font-bold hover:opacity-90"
       >
-        {testTailscale.isPending ? <Spinner size="sm" /> : 'Test Connection'}
+        {isSaving ? <Spinner size="sm" /> : 'Save'}
       </Button>
-
-      <div className="flex justify-end pt-4 border-t border-terminal-border">
-        <Button
-          onClick={onSave}
-          disabled={isSaving}
-          className="bg-terminal-green text-terminal-bg font-bold hover:opacity-90"
-        >
-          {isSaving ? <Spinner size="sm" /> : 'Save Settings'}
-        </Button>
-      </div>
     </div>
   );
 }
@@ -476,20 +371,16 @@ function APIKeysTab() {
   const { showToast } = useToast();
 
   const [newKeyName, setNewKeyName] = useState('');
-  const [newKey, setNewKey] = useState('');
+  const [newKey, setNewKey] = useState<string | null>(null);
 
   const handleCreate = async () => {
-    if (!newKeyName.trim()) {
-      showToast('Enter a name for the API key', 'error');
-      return;
-    }
     try {
-      const result = await createAPIKey.mutateAsync(newKeyName.trim());
+      const result = await createAPIKey.mutateAsync(newKeyName.trim() || 'Default Key');
       setNewKey(result.key);
       setNewKeyName('');
       showToast('API key created', 'success');
-    } catch {
-      showToast('Failed to create API key', 'error');
+    } catch (error: any) {
+      showToast(error.message || 'Failed to create API key', 'error');
     }
   };
 
@@ -504,7 +395,7 @@ function APIKeysTab() {
   };
 
   const copyKey = () => {
-    navigator.clipboard.writeText(newKey);
+    navigator.clipboard.writeText(newKey!);
     showToast('API key copied to clipboard', 'success');
   };
 
@@ -514,7 +405,6 @@ function APIKeysTab() {
         API keys allow programmatic access to GoCheck
       </div>
 
-      {/* Create new key */}
       <div className="flex gap-3">
         <Input
           type="text"
@@ -532,7 +422,6 @@ function APIKeysTab() {
         </Button>
       </div>
 
-      {/* New key display */}
       {newKey && (
         <div className="p-4 bg-terminal-yellow/10 border border-terminal-yellow rounded">
           <div className="text-xs text-terminal-yellow mb-2">
@@ -553,7 +442,6 @@ function APIKeysTab() {
         </div>
       )}
 
-      {/* Existing keys */}
       <div>
         <div className="text-xs text-terminal-muted mb-3">Existing Keys</div>
         {isLoading ? (
@@ -570,8 +458,7 @@ function APIKeysTab() {
                 <div>
                   <div className="text-sm font-semibold">{key.name}</div>
                   <div className="text-[10px] text-terminal-muted">
-                    Created:{' '}
-                    {new Date(key.created_at).toLocaleDateString()}
+                    Created: {new Date(key.created_at).toLocaleDateString()}
                   </div>
                 </div>
                 <Button
@@ -626,7 +513,6 @@ function PasskeysTab() {
         Passkeys provide passwordless authentication using your device's biometrics or security key
       </div>
 
-      {/* Register new passkey */}
       <div className="flex gap-3">
         <Input
           type="text"
@@ -644,7 +530,6 @@ function PasskeysTab() {
         </Button>
       </div>
 
-      {/* Existing passkeys */}
       <div>
         <div className="text-xs text-terminal-muted mb-3">Registered Passkeys</div>
         {isLoading ? (
@@ -661,8 +546,7 @@ function PasskeysTab() {
                 <div>
                   <div className="text-sm font-semibold">{passkey.name}</div>
                   <div className="text-[10px] text-terminal-muted">
-                    Registered:{' '}
-                    {new Date(passkey.created_at).toLocaleDateString()}
+                    Registered: {new Date(passkey.created_at).toLocaleDateString()}
                     {passkey.last_used_at && (
                       <>
                         {' • Last used: '}
@@ -679,6 +563,199 @@ function PasskeysTab() {
                 >
                   Delete
                 </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Probes Tab
+function ProbesTab() {
+  const { probes, isLoading, createProbe, deleteProbe, regenerateToken, isCreating, isDeleting, isRegenerating } = useProbes();
+  const { showToast } = useToast();
+
+  const [newRegionCode, setNewRegionCode] = useState('');
+  const [newIPAddress, setNewIPAddress] = useState('');
+  const [newToken, setNewToken] = useState<string | null>(null);
+  const [regeneratedToken, setRegeneratedToken] = useState<{ id: number; token: string } | null>(null);
+
+  const handleCreate = async () => {
+    try {
+      const result = await createProbe({
+        region_code: newRegionCode.trim(),
+        ip_address: newIPAddress.trim() || undefined,
+      });
+      setNewToken(result.token);
+      setNewRegionCode('');
+      setNewIPAddress('');
+      showToast('Probe created successfully', 'success');
+    } catch (error: any) {
+      showToast(error.message || 'Failed to create probe', 'error');
+    }
+  };
+
+  const handleDelete = async (id: number, regionCode: string) => {
+    if (!confirm(`Delete probe "${regionCode}"?`)) return;
+    try {
+      await deleteProbe(id);
+      showToast('Probe deleted', 'success');
+    } catch {
+      showToast('Failed to delete probe', 'error');
+    }
+  };
+
+  const handleRegenerateToken = async (id: number) => {
+    try {
+      const result = await regenerateToken(id);
+      setRegeneratedToken({ id, token: result.token });
+      showToast('Token regenerated', 'success');
+    } catch {
+      showToast('Failed to regenerate token', 'error');
+    }
+  };
+
+  const copyToken = (token: string) => {
+    navigator.clipboard.writeText(token);
+    showToast('Token copied to clipboard', 'success');
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="text-xs text-terminal-muted mb-4">
+        Manage multi-region probes. Create probes and generate authentication tokens for deployment.
+      </div>
+
+      <div className="space-y-3">
+        <Input
+          type="text"
+          value={newRegionCode}
+          onChange={(e) => setNewRegionCode(e.target.value)}
+          placeholder="Region code (e.g., us-nyc-1)"
+          className="bg-terminal-surface border-terminal-border text-terminal-text"
+        />
+        <Input
+          type="text"
+          value={newIPAddress}
+          onChange={(e) => setNewIPAddress(e.target.value)}
+          placeholder="IP address (optional)"
+          className="bg-terminal-surface border-terminal-border text-terminal-text"
+        />
+        <Button
+          onClick={handleCreate}
+          disabled={isCreating || !newRegionCode.trim()}
+          className="bg-terminal-green text-terminal-bg font-bold hover:opacity-90 w-full"
+        >
+          {isCreating ? <Spinner size="sm" /> : 'Create Probe'}
+        </Button>
+      </div>
+
+      {newToken && (
+        <div className="p-4 bg-terminal-yellow/10 border border-terminal-yellow rounded">
+          <div className="text-xs text-terminal-yellow mb-2">
+            Save this token - it won't be shown again!
+          </div>
+          <div className="flex gap-2">
+            <code className="flex-1 bg-terminal-bg p-2 rounded text-xs font-mono text-terminal-text break-all">
+              {newToken}
+            </code>
+            <Button
+              onClick={() => {
+                copyToken(newToken);
+                setNewToken(null);
+              }}
+              variant="outline"
+              className="text-xs bg-terminal-surface border-terminal-border"
+            >
+              Copy
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {regeneratedToken && (
+        <div className="p-4 bg-terminal-yellow/10 border border-terminal-yellow rounded">
+          <div className="text-xs text-terminal-yellow mb-2">
+            New token for probe (save this - it won't be shown again!)
+          </div>
+          <div className="flex gap-2">
+            <code className="flex-1 bg-terminal-bg p-2 rounded text-xs font-mono text-terminal-text break-all">
+              {regeneratedToken.token}
+            </code>
+            <Button
+              onClick={() => {
+                copyToken(regeneratedToken.token);
+                setRegeneratedToken(null);
+              }}
+              variant="outline"
+              className="text-xs bg-terminal-surface border-terminal-border"
+            >
+              Copy
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <div>
+        <div className="text-xs text-terminal-muted mb-3">Registered Probes</div>
+        {isLoading ? (
+          <Spinner />
+        ) : probes.length === 0 ? (
+          <div className="text-sm text-terminal-muted">No probes registered</div>
+        ) : (
+          <div className="space-y-2">
+            {probes.map((probe) => (
+              <div
+                key={probe.id}
+                className="p-3 bg-terminal-surface border border-terminal-border rounded"
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <div className="text-sm font-semibold">{probe.region_code}</div>
+                      <div
+                        className={cn(
+                          'text-[10px] px-2 py-0.5 rounded',
+                          probe.status === 'ONLINE'
+                            ? 'bg-terminal-green/20 text-terminal-green'
+                            : 'bg-terminal-red/20 text-terminal-red'
+                        )}
+                      >
+                        {probe.status}
+                      </div>
+                    </div>
+                    {probe.ip_address && (
+                      <div className="text-[10px] text-terminal-muted mt-1">
+                        IP: {probe.ip_address}
+                      </div>
+                    )}
+                    {probe.last_seen_at && (
+                      <div className="text-[10px] text-terminal-muted mt-1">
+                        Last seen: {new Date(probe.last_seen_at).toLocaleString()}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => handleRegenerateToken(probe.id)}
+                      disabled={isRegenerating}
+                      variant="outline"
+                      className="text-xs bg-terminal-surface border-terminal-border"
+                    >
+                      {isRegenerating ? <Spinner size="sm" /> : 'Regenerate Token'}
+                    </Button>
+                    <Button
+                      onClick={() => handleDelete(probe.id, probe.region_code)}
+                      disabled={isDeleting}
+                      variant="outline"
+                      className="text-xs bg-terminal-red/10 border-terminal-red/50 text-terminal-red hover:bg-terminal-red/20"
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                </div>
               </div>
             ))}
           </div>

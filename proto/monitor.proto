@@ -1,0 +1,51 @@
+syntax = "proto3";
+package monitor;
+option go_package = "gocheck/proto/pb";
+
+service Sentinel {
+  rpc EstablishConnection(stream ProbeMessage) returns (stream ServerCommand);
+}
+
+message ProbeMessage {
+  oneof payload {
+    Register register = 1;
+    CheckResult result = 2;
+    Heartbeat heartbeat = 3;
+  }
+}
+
+message Register {
+  string region_code = 1;
+  string token = 2;
+}
+
+message CheckResult {
+  int64 check_id = 1;
+  string region = 2;
+  int32 status_code = 3;
+  int32 latency_ms = 4;
+  bool success = 5;
+  string error_message = 6;
+}
+
+message Heartbeat {
+  int64 timestamp = 1;
+}
+
+message ServerCommand {
+  string command_type = 1;
+  int64 check_id = 2;
+  string check_type = 3;
+  string url = 4;
+  string host = 5;
+  string postgres_conn_string = 6;
+  string postgres_query = 7;
+  string expected_query_value = 8;
+  string dns_hostname = 9;
+  string dns_record_type = 10;
+  string expected_dns_value = 11;
+  string method = 12;
+  int32 timeout_seconds = 13;
+  string json_path = 14;
+  string expected_json_value = 15;
+}

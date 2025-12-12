@@ -26,6 +26,12 @@ export function StatusBar({ history, check, timeRange }: StatusBarProps) {
         >
           <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-terminal-bg border border-terminal-border text-[10px] px-2 py-1 rounded opacity-0 group-hover/bar:opacity-100 pointer-events-none whitespace-nowrap z-10">
             <span>{status.empty ? 'N/A' : status.success ? 'UP' : 'DOWN'}</span>
+            {status.region && (
+              <>
+                <span className="text-terminal-muted mx-1">|</span>
+                <span className="text-terminal-cyan">{status.region}</span>
+              </>
+            )}
             <span className="text-terminal-muted mx-1">|</span>
             <span className="text-terminal-muted">{status.time || ''}</span>
           </div>
@@ -99,7 +105,7 @@ function getStatusBar(
   history: CheckStatus[] | undefined,
   check: Check,
   timeRange: TimeRange
-): Array<{ success: boolean; time: string; empty: boolean }> {
+): Array<{ success: boolean; time: string; empty: boolean; region?: string }> {
   const data = history || [];
   if (data.length === 0) {
     return [];
@@ -121,13 +127,16 @@ function getStatusBar(
   }
 
   const dataToShow = data.slice(0, Math.min(limit, data.length));
-  const result: Array<{ success: boolean; time: string; empty: boolean }> = [];
+  const result: Array<{ success: boolean; time: string; empty: boolean; region?: string }> = [];
 
   for (let i = dataToShow.length - 1; i >= 0; i--) {
+    const item = dataToShow[i];
+    if (!item) continue;
     result.push({
-      success: dataToShow[i].success,
-      time: new Date(dataToShow[i].checked_at).toLocaleString(),
+      success: item.success,
+      time: new Date(item.checked_at).toLocaleString(),
       empty: false,
+      region: item.region,
     });
   }
 

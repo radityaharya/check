@@ -50,12 +50,18 @@ func NewDatabase(dbPath string) (*Database, error) {
 // NewDatabaseWithURL creates a new database instance with explicit URL
 // This is useful when you want to pass the database URL directly
 func NewDatabaseWithURL(databaseURL string, sqlitePath string) (*Database, error) {
+	return NewDatabaseWithURLOptions(databaseURL, sqlitePath, false)
+}
+
+// NewDatabaseWithURLOptions creates a new database instance with explicit URL and TimescaleDB option
+func NewDatabaseWithURLOptions(databaseURL string, sqlitePath string, useTimescale bool) (*Database, error) {
 	var impl DB
 	var err error
 	
 	if databaseURL != "" && strings.HasPrefix(databaseURL, "postgres") {
-		// Check if TimescaleDB is requested
-		if os.Getenv("USE_TIMESCALE") == "true" || strings.Contains(databaseURL, "timescale") {
+		// Check if TimescaleDB is requested (from parameter, env var, or URL contains "timescale")
+		shouldUseTimescale := useTimescale || os.Getenv("USE_TIMESCALE") == "true" || strings.Contains(databaseURL, "timescale")
+		if shouldUseTimescale {
 			impl, err = NewTimescaleDB(databaseURL)
 			if err != nil {
 				return nil, fmt.Errorf("failed to initialize timescale: %w", err)

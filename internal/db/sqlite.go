@@ -605,6 +605,38 @@ func (d *SQLiteDB) GetLastStatus(checkID int64) (*models.CheckHistory, error) {
 	return &h, nil
 }
 
+func (d *SQLiteDB) GetLastStatusByRegion(checkID int64) (map[string]*models.CheckHistory, error) {
+	rows, err := d.db.Query(`
+		SELECT id, check_id, status_code, response_time_ms, success, COALESCE(error_message, ''), checked_at, probe_id, COALESCE(region, ''), COALESCE(response_body, '')
+		FROM check_history
+		WHERE check_id = ? AND region != ''
+		ORDER BY region, checked_at DESC
+	`, checkID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]*models.CheckHistory)
+	seenRegions := make(map[string]bool)
+	for rows.Next() {
+		var h models.CheckHistory
+		var probeID sql.NullInt64
+		if err := rows.Scan(&h.ID, &h.CheckID, &h.StatusCode, &h.ResponseTimeMs, &h.Success, &h.ErrorMessage, &h.CheckedAt, &probeID, &h.Region, &h.ResponseBody); err != nil {
+			return nil, err
+		}
+		if probeID.Valid {
+			h.ProbeID = &probeID.Int64
+		}
+		if !seenRegions[h.Region] {
+			result[h.Region] = &h
+			seenRegions[h.Region] = true
+		}
+	}
+
+	return result, rows.Err()
+}
+
 func (d *SQLiteDB) GetStats(since *time.Time) (*models.Stats, error) {
 	var stats models.Stats
 
@@ -1113,4 +1145,37 @@ func (d *SQLiteDB) UpdateWebAuthnCredentialSignCount(credID []byte, signCount ui
 func (d *SQLiteDB) DeleteWebAuthnCredential(id int64) error {
 	_, err := d.db.Exec(`DELETE FROM webauthn_credentials WHERE id = ?`, id)
 	return err
+}
+
+// Probe operations are not supported on SQLite.
+func (d *SQLiteDB) CreateProbe(regionCode, ipAddress string) (int64, string, error) {
+	return 0, "", fmt.Errorf("probe management is not supported for sqlite backend")
+}
+
+func (d *SQLiteDB) ValidateProbeToken(token string) (int64, error) {
+	return 0, fmt.Errorf("probe management is not supported for sqlite backend")
+}
+
+func (d *SQLiteDB) UpdateProbeStatus(probeID int64, status string) error {
+	return fmt.Errorf("probe management is not supported for sqlite backend")
+}
+
+func (d *SQLiteDB) UpdateProbeLastSeen(probeID int64) error {
+	return fmt.Errorf("probe management is not supported for sqlite backend")
+}
+
+func (d *SQLiteDB) GetAllProbes() ([]models.Probe, error) {
+	return nil, fmt.Errorf("probe management is not supported for sqlite backend")
+}
+
+func (d *SQLiteDB) GetProbeByID(id int64) (*models.Probe, error) {
+	return nil, fmt.Errorf("probe management is not supported for sqlite backend")
+}
+
+func (d *SQLiteDB) DeleteProbe(id int64) error {
+	return fmt.Errorf("probe management is not supported for sqlite backend")
+}
+
+func (d *SQLiteDB) RegenerateProbeToken(id int64) (string, error) {
+	return "", fmt.Errorf("probe management is not supported for sqlite backend")
 }

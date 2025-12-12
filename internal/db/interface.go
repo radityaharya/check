@@ -23,6 +23,7 @@ type DB interface {
 	GetCheckHistory(checkID int64, since *time.Time, limit int) ([]models.CheckHistory, error)
 	GetCheckHistoryAggregated(checkID int64, since *time.Time, bucketMinutes int, limit int) ([]models.CheckHistory, error)
 	GetLastStatus(checkID int64) (*models.CheckHistory, error)
+	GetLastStatusByRegion(checkID int64) (map[string]*models.CheckHistory, error)
 
 	// Stats operations
 	GetStats(since *time.Time) (*models.Stats, error)
@@ -76,4 +77,14 @@ type DB interface {
 	GetWebAuthnCredentialByID(credID []byte) (*models.WebAuthnCredential, error)
 	UpdateWebAuthnCredentialSignCount(credID []byte, signCount uint32) error
 	DeleteWebAuthnCredential(id int64) error
+
+	// Probe operations
+	CreateProbe(regionCode, ipAddress string) (int64, string, error)
+	ValidateProbeToken(token string) (int64, error)
+	UpdateProbeStatus(probeID int64, status string) error
+	UpdateProbeLastSeen(probeID int64) error
+	GetAllProbes() ([]models.Probe, error)
+	GetProbeByID(id int64) (*models.Probe, error)
+	DeleteProbe(id int64) error
+	RegenerateProbeToken(id int64) (string, error)
 }

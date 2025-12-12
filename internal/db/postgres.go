@@ -518,7 +518,7 @@ func (d *PostgresDB) AddHistory(h *models.CheckHistory) error {
 
 func (d *PostgresDB) GetCheckHistory(checkID int64, since *time.Time, limit int) ([]models.CheckHistory, error) {
 	query := `
-		SELECT id, check_id, status_code, response_time_ms, success, COALESCE(error_message, ''), checked_at
+		SELECT id, check_id, status_code, response_time_ms, success, COALESCE(error_message, ''), checked_at, probe_id, COALESCE(NULLIF(region, ''), 'host'), COALESCE(response_body, '')
 		FROM check_history
 		WHERE check_id = $1`
 	args := []interface{}{checkID}
@@ -543,8 +543,15 @@ func (d *PostgresDB) GetCheckHistory(checkID int64, since *time.Time, limit int)
 	var history []models.CheckHistory
 	for rows.Next() {
 		var h models.CheckHistory
-		if err := rows.Scan(&h.ID, &h.CheckID, &h.StatusCode, &h.ResponseTimeMs, &h.Success, &h.ErrorMessage, &h.CheckedAt); err != nil {
+		var probeID sql.NullInt64
+		if err := rows.Scan(&h.ID, &h.CheckID, &h.StatusCode, &h.ResponseTimeMs, &h.Success, &h.ErrorMessage, &h.CheckedAt, &probeID, &h.Region, &h.ResponseBody); err != nil {
 			return nil, err
+		}
+		if probeID.Valid {
+			h.ProbeID = &probeID.Int64
+		}
+		if h.Region == "" {
+			h.Region = "host"
 		}
 		history = append(history, h)
 	}
@@ -562,9 +569,17 @@ func (d *PostgresDB) GetCheckHistoryAggregated(checkID int64, since *time.Time, 
 			CAST(AVG(response_time_ms) AS INTEGER) as response_time_ms,
 			BOOL_AND(success) as success,
 			'' as error_message,
-			date_trunc('minute', checked_at - INTERVAL '0 minute' * (EXTRACT(MINUTE FROM checked_at)::INTEGER % $1)) as checked_at
-		FROM check_history
-		WHERE check_id = $2`
+			date_trunc('minute', checked_at - INTERVAL '0 minute' * (EXTRACT(MINUTE FROM checked_at)::INTEGER % $1)) as checked_at,
+			NULL::BIGINT as probe_id,
+			region,
+			'' as response_body
+		FROM (
+			SELECT 
+				id, check_id, status_code, response_time_ms, success, error_message, checked_at, probe_id,
+				COALESCE(NULLIF(region, ''), 'host') as region,
+				response_body
+			FROM check_history
+			WHERE check_id = $2`
 	args := []interface{}{bucketMinutes, checkID}
 
 	if since != nil {
@@ -572,7 +587,7 @@ func (d *PostgresDB) GetCheckHistoryAggregated(checkID int64, since *time.Time, 
 		args = append(args, since.UTC())
 	}
 
-	query += " GROUP BY check_id, date_trunc('minute', checked_at - INTERVAL '0 minute' * (EXTRACT(MINUTE FROM checked_at)::INTEGER % $1)) ORDER BY checked_at DESC"
+	query += ") AS transformed_history GROUP BY check_id, date_trunc('minute', checked_at - INTERVAL '0 minute' * (EXTRACT(MINUTE FROM checked_at)::INTEGER % $1)), region ORDER BY checked_at DESC, region"
 
 	if limit > 0 {
 		query += fmt.Sprintf(" LIMIT $%d", len(args)+1)
@@ -588,8 +603,15 @@ func (d *PostgresDB) GetCheckHistoryAggregated(checkID int64, since *time.Time, 
 	history := make([]models.CheckHistory, 0, limit)
 	for rows.Next() {
 		var h models.CheckHistory
-		if err := rows.Scan(&h.ID, &h.CheckID, &h.StatusCode, &h.ResponseTimeMs, &h.Success, &h.ErrorMessage, &h.CheckedAt); err != nil {
+		var probeID sql.NullInt64
+		if err := rows.Scan(&h.ID, &h.CheckID, &h.StatusCode, &h.ResponseTimeMs, &h.Success, &h.ErrorMessage, &h.CheckedAt, &probeID, &h.Region, &h.ResponseBody); err != nil {
 			return nil, err
+		}
+		if probeID.Valid {
+			h.ProbeID = &probeID.Int64
+		}
+		if h.Region == "" {
+			h.Region = "host"
 		}
 		history = append(history, h)
 	}
@@ -615,6 +637,35 @@ func (d *PostgresDB) GetLastStatus(checkID int64) (*models.CheckHistory, error) 
 	}
 
 	return &h, nil
+}
+
+func (d *PostgresDB) GetLastStatusByRegion(checkID int64) (map[string]*models.CheckHistory, error) {
+	rows, err := d.db.Query(`
+		SELECT DISTINCT ON (region)
+			id, check_id, status_code, response_time_ms, success, COALESCE(error_message, ''), checked_at, probe_id, COALESCE(region, ''), COALESCE(response_body, '')
+		FROM check_history
+		WHERE check_id = $1 AND region != ''
+		ORDER BY region, checked_at DESC
+	`, checkID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]*models.CheckHistory)
+	for rows.Next() {
+		var h models.CheckHistory
+		var probeID sql.NullInt64
+		if err := rows.Scan(&h.ID, &h.CheckID, &h.StatusCode, &h.ResponseTimeMs, &h.Success, &h.ErrorMessage, &h.CheckedAt, &probeID, &h.Region, &h.ResponseBody); err != nil {
+			return nil, err
+		}
+		if probeID.Valid {
+			h.ProbeID = &probeID.Int64
+		}
+		result[h.Region] = &h
+	}
+
+	return result, rows.Err()
 }
 
 func (d *PostgresDB) GetStats(since *time.Time) (*models.Stats, error) {
@@ -1099,4 +1150,36 @@ func (d *PostgresDB) UpdateWebAuthnCredentialSignCount(credID []byte, signCount 
 func (d *PostgresDB) DeleteWebAuthnCredential(id int64) error {
 	_, err := d.db.Exec(`DELETE FROM webauthn_credentials WHERE id = $1`, id)
 	return err
+}
+
+func (d *PostgresDB) CreateProbe(regionCode, ipAddress string) (int64, string, error) {
+	return 0, "", fmt.Errorf("probes not supported in PostgreSQL mode, use TimescaleDB")
+}
+
+func (d *PostgresDB) ValidateProbeToken(token string) (int64, error) {
+	return 0, fmt.Errorf("probes not supported in PostgreSQL mode, use TimescaleDB")
+}
+
+func (d *PostgresDB) UpdateProbeStatus(probeID int64, status string) error {
+	return fmt.Errorf("probes not supported in PostgreSQL mode, use TimescaleDB")
+}
+
+func (d *PostgresDB) UpdateProbeLastSeen(probeID int64) error {
+	return fmt.Errorf("probes not supported in PostgreSQL mode, use TimescaleDB")
+}
+
+func (d *PostgresDB) GetAllProbes() ([]models.Probe, error) {
+	return nil, fmt.Errorf("probes not supported in PostgreSQL mode, use TimescaleDB")
+}
+
+func (d *PostgresDB) GetProbeByID(id int64) (*models.Probe, error) {
+	return nil, fmt.Errorf("probes not supported in PostgreSQL mode, use TimescaleDB")
+}
+
+func (d *PostgresDB) DeleteProbe(id int64) error {
+	return fmt.Errorf("probes not supported in PostgreSQL mode, use TimescaleDB")
+}
+
+func (d *PostgresDB) RegenerateProbeToken(id int64) (string, error) {
+	return "", fmt.Errorf("probes not supported in PostgreSQL mode, use TimescaleDB")
 }

@@ -1,7 +1,10 @@
 package db
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -126,6 +129,24 @@ func (d *TimescaleDB) initSchema() error {
 		group_id INTEGER REFERENCES groups(id) ON DELETE SET NULL
 	);
 
+	-- Probes table
+	CREATE TABLE IF NOT EXISTS probes (
+		id BIGSERIAL PRIMARY KEY,
+		region_code TEXT NOT NULL UNIQUE,
+		ip_address TEXT,
+		version TEXT,
+		status TEXT NOT NULL DEFAULT 'OFFLINE',
+		last_seen_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+	);
+
+	-- Probe tokens table
+	CREATE TABLE IF NOT EXISTS probe_tokens (
+		id BIGSERIAL PRIMARY KEY,
+		probe_id BIGINT NOT NULL REFERENCES probes(id) ON DELETE CASCADE,
+		token_hash TEXT NOT NULL,
+		created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+
 	-- Check history table (will be converted to hypertable)
 	CREATE TABLE IF NOT EXISTS check_history (
 		id BIGSERIAL,
@@ -136,6 +157,8 @@ func (d *TimescaleDB) initSchema() error {
 		error_message TEXT,
 		response_body TEXT,
 		checked_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		probe_id BIGINT REFERENCES probes(id) ON DELETE SET NULL,
+		region TEXT,
 		FOREIGN KEY (check_id) REFERENCES checks(id) ON DELETE CASCADE
 	);
 
@@ -229,17 +252,50 @@ func (d *TimescaleDB) initSchema() error {
 	-- Index for tags
 	CREATE INDEX IF NOT EXISTS idx_tags_name ON tags(name);
 
-	-- Convert check_history to hypertable if TimescaleDB extension is available
+	-- Add probe_id and region columns if they don't exist (for migrations)
 	DO $$ 
 	BEGIN
+		IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+					   WHERE table_name='check_history' AND column_name='probe_id') THEN
+			ALTER TABLE check_history ADD COLUMN probe_id BIGINT REFERENCES probes(id) ON DELETE SET NULL;
+		END IF;
+		
+		IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+					   WHERE table_name='check_history' AND column_name='region') THEN
+			ALTER TABLE check_history ADD COLUMN region TEXT;
+		END IF;
+	END $$;
+
+	-- Convert check_history to hypertable if TimescaleDB extension is available
+	DO $$ 
+	DECLARE
+		has_pkey BOOLEAN;
+		pkey_columns TEXT;
+	BEGIN
 		IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'timescaledb') THEN
-			-- Ensure primary key exists (required for hypertable)
-			-- If table already has data, TimescaleDB will handle the conversion
-			IF NOT EXISTS (
+			-- Check if primary key exists and what columns it has
+			SELECT EXISTS (
 				SELECT 1 FROM pg_constraint 
 				WHERE conname = 'check_history_pkey'
-			) THEN
-				ALTER TABLE check_history ADD PRIMARY KEY (id, checked_at);
+			) INTO has_pkey;
+
+			IF has_pkey THEN
+				-- Get primary key columns
+				SELECT string_agg(a.attname, ', ' ORDER BY c.conkey[array_position(c.conkey, a.attnum)])
+				INTO pkey_columns
+				FROM pg_constraint c
+				JOIN pg_class t ON c.conrelid = t.oid
+				JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(c.conkey)
+				WHERE c.conname = 'check_history_pkey';
+
+				-- If PK doesn't include checked_at, drop and recreate
+				IF pkey_columns NOT LIKE '%checked_at%' THEN
+					ALTER TABLE check_history DROP CONSTRAINT IF EXISTS check_history_pkey;
+					ALTER TABLE check_history ADD PRIMARY KEY (checked_at, id);
+				END IF;
+			ELSE
+				-- No PK exists, create composite one
+				ALTER TABLE check_history ADD PRIMARY KEY (checked_at, id);
 			END IF;
 			
 			-- Try to convert to hypertable (if_not_exists handles case where it's already a hypertable)
@@ -247,21 +303,17 @@ func (d *TimescaleDB) initSchema() error {
 				PERFORM create_hypertable('check_history', 'checked_at', 
 					chunk_time_interval => INTERVAL '1 day',
 					if_not_exists => TRUE);
+				
+				-- Add compression policy for data older than 7 days
+				BEGIN
+					PERFORM add_compression_policy('check_history', INTERVAL '7 days', if_not_exists => TRUE);
+				EXCEPTION
+					WHEN OTHERS THEN
+						NULL;
+				END;
 			EXCEPTION
 				WHEN OTHERS THEN
-					-- If conversion fails (e.g., already a hypertable or incompatible structure),
-					-- ensure at least primary key exists
-					IF NOT EXISTS (
-						SELECT 1 FROM pg_constraint 
-						WHERE conname = 'check_history_pkey'
-					) THEN
-						BEGIN
-							ALTER TABLE check_history ADD PRIMARY KEY (id, checked_at);
-						EXCEPTION
-							WHEN OTHERS THEN
-								ALTER TABLE check_history ADD PRIMARY KEY (id);
-						END;
-					END IF;
+					NULL;
 			END;
 		ELSE
 			-- Not TimescaleDB, ensure regular primary key exists
@@ -274,18 +326,7 @@ func (d *TimescaleDB) initSchema() error {
 		END IF;
 	EXCEPTION
 		WHEN OTHERS THEN
-			-- If anything fails, ensure at least a basic primary key exists
-			BEGIN
-				IF NOT EXISTS (
-					SELECT 1 FROM pg_constraint 
-					WHERE conname = 'check_history_pkey'
-				) THEN
-					ALTER TABLE check_history ADD PRIMARY KEY (id);
-				END IF;
-			EXCEPTION
-				WHEN OTHERS THEN
-					NULL;
-			END;
+			NULL;
 	END $$;
 
 	-- Add new columns if they don't exist (for migrations)
@@ -311,6 +352,14 @@ func (d *TimescaleDB) initSchema() error {
 			ALTER TABLE checks ADD COLUMN tailscale_service_path TEXT;
 		END IF;
 	END $$;
+
+	-- Indexes for probes table
+	CREATE INDEX IF NOT EXISTS idx_probes_region_code ON probes(region_code);
+	CREATE INDEX IF NOT EXISTS idx_probes_status ON probes(status);
+	CREATE INDEX IF NOT EXISTS idx_probe_tokens_probe_id ON probe_tokens(probe_id);
+	CREATE INDEX IF NOT EXISTS idx_probe_tokens_token_hash ON probe_tokens(token_hash);
+	CREATE INDEX IF NOT EXISTS idx_check_history_probe_id ON check_history(probe_id) WHERE probe_id IS NOT NULL;
+	CREATE INDEX IF NOT EXISTS idx_check_history_region ON check_history(region) WHERE region IS NOT NULL;
 	`
 
 	_, err := d.db.Exec(schema)
@@ -566,15 +615,15 @@ func (d *TimescaleDB) AddHistory(h *models.CheckHistory) error {
 		responseBody = responseBody[:10000] + "... (truncated)"
 	}
 	_, err := d.db.Exec(`
-		INSERT INTO check_history (check_id, status_code, response_time_ms, success, error_message, response_body)
-		VALUES ($1, $2, $3, $4, $5, $6)
-	`, h.CheckID, h.StatusCode, h.ResponseTimeMs, h.Success, h.ErrorMessage, responseBody)
+		INSERT INTO check_history (check_id, status_code, response_time_ms, success, error_message, response_body, probe_id, region)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`, h.CheckID, h.StatusCode, h.ResponseTimeMs, h.Success, h.ErrorMessage, responseBody, h.ProbeID, h.Region)
 	return err
 }
 
 func (d *TimescaleDB) GetCheckHistory(checkID int64, since *time.Time, limit int) ([]models.CheckHistory, error) {
 	query := `
-		SELECT id, check_id, status_code, response_time_ms, success, COALESCE(error_message, ''), checked_at
+		SELECT id, check_id, status_code, response_time_ms, success, COALESCE(error_message, ''), checked_at, probe_id, COALESCE(NULLIF(region, ''), 'host'), COALESCE(response_body, '')
 		FROM check_history
 		WHERE check_id = $1`
 	args := []interface{}{checkID}
@@ -599,8 +648,15 @@ func (d *TimescaleDB) GetCheckHistory(checkID int64, since *time.Time, limit int
 	var history []models.CheckHistory
 	for rows.Next() {
 		var h models.CheckHistory
-		if err := rows.Scan(&h.ID, &h.CheckID, &h.StatusCode, &h.ResponseTimeMs, &h.Success, &h.ErrorMessage, &h.CheckedAt); err != nil {
+		var probeID sql.NullInt64
+		if err := rows.Scan(&h.ID, &h.CheckID, &h.StatusCode, &h.ResponseTimeMs, &h.Success, &h.ErrorMessage, &h.CheckedAt, &probeID, &h.Region, &h.ResponseBody); err != nil {
 			return nil, err
+		}
+		if probeID.Valid {
+			h.ProbeID = &probeID.Int64
+		}
+		if h.Region == "" {
+			h.Region = "host"
 		}
 		history = append(history, h)
 	}
@@ -617,9 +673,17 @@ func (d *TimescaleDB) GetCheckHistoryAggregated(checkID int64, since *time.Time,
 			CAST(AVG(response_time_ms) AS INTEGER) as response_time_ms,
 			BOOL_AND(success) as success,
 			'' as error_message,
-			time_bucket(INTERVAL '%d minutes', checked_at) as checked_at
-		FROM check_history
-		WHERE check_id = $1`
+			time_bucket(INTERVAL '%d minutes', checked_at) as checked_at,
+			NULL::BIGINT as probe_id,
+			region,
+			'' as response_body
+		FROM (
+			SELECT 
+				id, check_id, status_code, response_time_ms, success, error_message, checked_at, probe_id,
+				COALESCE(NULLIF(region, ''), 'host') as region,
+				response_body
+			FROM check_history
+			WHERE check_id = $1`
 	args := []interface{}{checkID}
 
 	if since != nil {
@@ -627,9 +691,10 @@ func (d *TimescaleDB) GetCheckHistoryAggregated(checkID int64, since *time.Time,
 		args = append(args, since.UTC())
 	}
 
+	query += ") AS transformed_history"
 	bucketInterval := fmt.Sprintf("%d minutes", bucketMinutes)
 	query = fmt.Sprintf(query, bucketMinutes)
-	query += fmt.Sprintf(" GROUP BY check_id, time_bucket(INTERVAL '%s', checked_at) ORDER BY checked_at DESC", bucketInterval)
+	query += fmt.Sprintf(" GROUP BY check_id, time_bucket(INTERVAL '%s', checked_at), region ORDER BY checked_at DESC, region", bucketInterval)
 
 	if limit > 0 {
 		query += fmt.Sprintf(" LIMIT $%d", len(args)+1)
@@ -645,8 +710,15 @@ func (d *TimescaleDB) GetCheckHistoryAggregated(checkID int64, since *time.Time,
 	history := make([]models.CheckHistory, 0, limit)
 	for rows.Next() {
 		var h models.CheckHistory
-		if err := rows.Scan(&h.ID, &h.CheckID, &h.StatusCode, &h.ResponseTimeMs, &h.Success, &h.ErrorMessage, &h.CheckedAt); err != nil {
+		var probeID sql.NullInt64
+		if err := rows.Scan(&h.ID, &h.CheckID, &h.StatusCode, &h.ResponseTimeMs, &h.Success, &h.ErrorMessage, &h.CheckedAt, &probeID, &h.Region, &h.ResponseBody); err != nil {
 			return nil, err
+		}
+		if probeID.Valid {
+			h.ProbeID = &probeID.Int64
+		}
+		if h.Region == "" {
+			h.Region = "host"
 		}
 		history = append(history, h)
 	}
@@ -656,13 +728,14 @@ func (d *TimescaleDB) GetCheckHistoryAggregated(checkID int64, since *time.Time,
 
 func (d *TimescaleDB) GetLastStatus(checkID int64) (*models.CheckHistory, error) {
 	var h models.CheckHistory
+	var probeID sql.NullInt64
 	err := d.db.QueryRow(`
-		SELECT id, check_id, status_code, response_time_ms, success, COALESCE(error_message, ''), checked_at
+		SELECT id, check_id, status_code, response_time_ms, success, COALESCE(error_message, ''), checked_at, probe_id, COALESCE(NULLIF(region, ''), 'host'), COALESCE(response_body, '')
 		FROM check_history
 		WHERE check_id = $1
 		ORDER BY checked_at DESC
 		LIMIT 1
-	`, checkID).Scan(&h.ID, &h.CheckID, &h.StatusCode, &h.ResponseTimeMs, &h.Success, &h.ErrorMessage, &h.CheckedAt)
+	`, checkID).Scan(&h.ID, &h.CheckID, &h.StatusCode, &h.ResponseTimeMs, &h.Success, &h.ErrorMessage, &h.CheckedAt, &probeID, &h.Region, &h.ResponseBody)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -671,7 +744,46 @@ func (d *TimescaleDB) GetLastStatus(checkID int64) (*models.CheckHistory, error)
 		return nil, err
 	}
 
+	if probeID.Valid {
+		h.ProbeID = &probeID.Int64
+	}
+	if h.Region == "" {
+		h.Region = "host"
+	}
+
 	return &h, nil
+}
+
+func (d *TimescaleDB) GetLastStatusByRegion(checkID int64) (map[string]*models.CheckHistory, error) {
+	rows, err := d.db.Query(`
+		SELECT DISTINCT ON (COALESCE(NULLIF(region, ''), 'host'))
+			id, check_id, status_code, response_time_ms, success, COALESCE(error_message, ''), checked_at, probe_id, COALESCE(NULLIF(region, ''), 'host'), COALESCE(response_body, '')
+		FROM check_history
+		WHERE check_id = $1
+		ORDER BY COALESCE(NULLIF(region, ''), 'host'), checked_at DESC
+	`, checkID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]*models.CheckHistory)
+	for rows.Next() {
+		var h models.CheckHistory
+		var probeID sql.NullInt64
+		if err := rows.Scan(&h.ID, &h.CheckID, &h.StatusCode, &h.ResponseTimeMs, &h.Success, &h.ErrorMessage, &h.CheckedAt, &probeID, &h.Region, &h.ResponseBody); err != nil {
+			return nil, err
+		}
+		if probeID.Valid {
+			h.ProbeID = &probeID.Int64
+		}
+		if h.Region == "" {
+			h.Region = "host"
+		}
+		result[h.Region] = &h
+	}
+
+	return result, rows.Err()
 }
 
 func (d *TimescaleDB) GetStats(since *time.Time) (*models.Stats, error) {
@@ -1155,5 +1267,147 @@ func (d *TimescaleDB) UpdateWebAuthnCredentialSignCount(credID []byte, signCount
 func (d *TimescaleDB) DeleteWebAuthnCredential(id int64) error {
 	_, err := d.db.Exec(`DELETE FROM webauthn_credentials WHERE id = $1`, id)
 	return err
+}
+
+func (d *TimescaleDB) CreateProbe(regionCode, ipAddress string) (int64, string, error) {
+	var probeID int64
+	err := d.db.QueryRow(`
+		INSERT INTO probes (region_code, ip_address, status)
+		VALUES ($1, $2, 'OFFLINE')
+		RETURNING id
+	`, regionCode, ipAddress).Scan(&probeID)
+	if err != nil {
+		return 0, "", err
+	}
+
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return 0, "", fmt.Errorf("failed to generate token: %w", err)
+	}
+	token := hex.EncodeToString(tokenBytes)
+
+	hash := sha256.Sum256([]byte(token))
+	tokenHash := hex.EncodeToString(hash[:])
+
+	_, err = d.db.Exec(`
+		INSERT INTO probe_tokens (probe_id, token_hash)
+		VALUES ($1, $2)
+	`, probeID, tokenHash)
+	if err != nil {
+		return 0, "", err
+	}
+
+	return probeID, token, nil
+}
+
+func (d *TimescaleDB) ValidateProbeToken(token string) (int64, error) {
+	hash := sha256.Sum256([]byte(token))
+	tokenHash := hex.EncodeToString(hash[:])
+
+	var probeID int64
+	err := d.db.QueryRow(`
+		SELECT pt.probe_id
+		FROM probe_tokens pt
+		WHERE pt.token_hash = $1
+	`, tokenHash).Scan(&probeID)
+	if err == sql.ErrNoRows {
+		return 0, fmt.Errorf("invalid token")
+	}
+	if err != nil {
+		return 0, err
+	}
+
+	return probeID, nil
+}
+
+func (d *TimescaleDB) UpdateProbeStatus(probeID int64, status string) error {
+	_, err := d.db.Exec(`
+		UPDATE probes
+		SET status = $1, last_seen_at = NOW()
+		WHERE id = $2
+	`, status, probeID)
+	return err
+}
+
+func (d *TimescaleDB) UpdateProbeLastSeen(probeID int64) error {
+	_, err := d.db.Exec(`
+		UPDATE probes
+		SET last_seen_at = NOW(), status = 'ONLINE'
+		WHERE id = $1
+	`, probeID)
+	return err
+}
+
+func (d *TimescaleDB) GetAllProbes() ([]models.Probe, error) {
+	rows, err := d.db.Query(`
+		SELECT id, region_code, COALESCE(ip_address, ''), COALESCE(version, ''), status, last_seen_at
+		FROM probes
+		ORDER BY region_code
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	probes := make([]models.Probe, 0)
+	for rows.Next() {
+		var p models.Probe
+		var lastSeenAt sql.NullTime
+		if err := rows.Scan(&p.ID, &p.RegionCode, &p.IPAddress, &p.Version, &p.Status, &lastSeenAt); err != nil {
+			return nil, err
+		}
+		if lastSeenAt.Valid {
+			p.LastSeenAt = &lastSeenAt.Time
+		}
+		probes = append(probes, p)
+	}
+	return probes, rows.Err()
+}
+
+func (d *TimescaleDB) GetProbeByID(id int64) (*models.Probe, error) {
+	var p models.Probe
+	var lastSeenAt sql.NullTime
+	err := d.db.QueryRow(`
+		SELECT id, region_code, COALESCE(ip_address, ''), COALESCE(version, ''), status, last_seen_at
+		FROM probes
+		WHERE id = $1
+	`, id).Scan(&p.ID, &p.RegionCode, &p.IPAddress, &p.Version, &p.Status, &lastSeenAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if lastSeenAt.Valid {
+		p.LastSeenAt = &lastSeenAt.Time
+	}
+	return &p, nil
+}
+
+func (d *TimescaleDB) DeleteProbe(id int64) error {
+	_, err := d.db.Exec(`DELETE FROM probes WHERE id = $1`, id)
+	return err
+}
+
+func (d *TimescaleDB) RegenerateProbeToken(id int64) (string, error) {
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return "", fmt.Errorf("failed to generate token: %w", err)
+	}
+	token := hex.EncodeToString(tokenBytes)
+
+	hash := sha256.Sum256([]byte(token))
+	tokenHash := hex.EncodeToString(hash[:])
+
+	_, err := d.db.Exec(`
+		DELETE FROM probe_tokens WHERE probe_id = $1;
+		INSERT INTO probe_tokens (probe_id, token_hash)
+		VALUES ($1, $2)
+	`, id, tokenHash)
+	if err != nil {
+		return "", err
+	}
+
+	return token, nil
 }
 

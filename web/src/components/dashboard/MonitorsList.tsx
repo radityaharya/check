@@ -10,6 +10,7 @@ import {
   getCheckTarget,
   getCheckTypeClass,
   formatResponseTime,
+  formatDate,
 } from '@/lib/helpers';
 import type { Check, CheckGroup, Group, Tag, TimeRange } from '@/types';
 
@@ -423,7 +424,16 @@ function CheckItem({
           </div>
 
           {/* Last Checked */}
-          <div className="hidden sm:block text-xs text-terminal-muted min-w-[60px] text-right">
+          <div 
+            className="hidden sm:block text-xs text-terminal-muted min-w-[60px] text-right"
+            title={
+              check.last_status?.region 
+                ? `Region: ${check.last_status.region}${check.last_checked_at ? `\nChecked: ${formatDate(check.last_checked_at)}` : ''}`
+                : check.last_checked_at 
+                  ? formatDate(check.last_checked_at)
+                  : undefined
+            }
+          >
             {formatTimeAgo(check.last_checked_at)}
           </div>
 
@@ -488,7 +498,18 @@ function CheckItem({
               </div>
               <div className="bg-terminal-surface border border-terminal-border rounded p-2">
                 <div className="text-[10px] text-terminal-muted uppercase">Last Check</div>
-                <div className="font-bold">{formatTimeAgo(check.last_checked_at)}</div>
+                <div 
+                  className="font-bold"
+                  title={
+                    check.last_status?.region 
+                      ? `Region: ${check.last_status.region}${check.last_checked_at ? `\nChecked: ${formatDate(check.last_checked_at)}` : ''}`
+                      : check.last_checked_at 
+                        ? formatDate(check.last_checked_at)
+                        : undefined
+                  }
+                >
+                  {formatTimeAgo(check.last_checked_at)}
+                </div>
               </div>
             </div>
 

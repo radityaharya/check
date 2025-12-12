@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -27,15 +29,23 @@ type Handlers struct {
 	notifiers       []notifier.Notifier
 	snapshotService *snapshot.Service
 	dataDir         string
+	sentinelServer  interface {
+		BroadcastCheckFull(check models.Check)
+		BroadcastCheckToRegion(check models.Check, region string)
+	}
 }
 
-func NewHandlers(database *db.Database, engine *checker.Engine, notifiers []notifier.Notifier, snapshotService *snapshot.Service, dataDir string) *Handlers {
+func NewHandlers(database *db.Database, engine *checker.Engine, notifiers []notifier.Notifier, snapshotService *snapshot.Service, dataDir string, sentinelServer interface {
+	BroadcastCheckFull(check models.Check)
+	BroadcastCheckToRegion(check models.Check, region string)
+}) *Handlers {
 	return &Handlers{
 		db:              database,
 		engine:          engine,
 		notifiers:       notifiers,
 		snapshotService: snapshotService,
 		dataDir:         dataDir,
+		sentinelServer:  sentinelServer,
 	}
 }
 
@@ -428,6 +438,134 @@ func (h *Handlers) GetCheckHistory(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(history)
+}
+
+func (h *Handlers) GetCheckStats(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseInt(vars["id"], 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	since, err := parseRangeParam(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	history, err := h.db.GetCheckHistory(id, since, 10000)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if len(history) == 0 {
+		stats := models.CheckStats{
+			CheckID:      id,
+			TotalChecks:  0,
+			SuccessCount: 0,
+			SuccessRate:  0,
+			AvgLatency:   0,
+			P90Latency:   0,
+			P99Latency:   0,
+			DownCount:    0,
+			Regions:      []models.RegionStats{},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(stats)
+		return
+	}
+
+	totalChecks := len(history)
+	successCount := 0
+	totalLatency := int64(0)
+	latencies := make([]int, 0, totalChecks)
+	regionMap := make(map[string]*models.RegionStats)
+
+	for _, h := range history {
+		if h.Success {
+			successCount++
+		}
+		totalLatency += int64(h.ResponseTimeMs)
+		latencies = append(latencies, h.ResponseTimeMs)
+
+		region := h.Region
+		if region == "" {
+			region = "host"
+		}
+		if regionMap[region] == nil {
+			regionMap[region] = &models.RegionStats{
+				Region:       region,
+				TotalChecks:  0,
+				SuccessCount: 0,
+				TotalLatency: 0,
+			}
+		}
+		regionMap[region].TotalChecks++
+		if h.Success {
+			regionMap[region].SuccessCount++
+		}
+		regionMap[region].TotalLatency += int64(h.ResponseTimeMs)
+	}
+
+	successRate := float64(successCount) / float64(totalChecks) * 100
+	avgLatency := int(totalLatency / int64(totalChecks))
+	downCount := totalChecks - successCount
+
+	sort.Ints(latencies)
+	p90Index := int(float64(len(latencies)) * 0.9)
+	p99Index := int(float64(len(latencies)) * 0.99)
+	if p90Index >= len(latencies) {
+		p90Index = len(latencies) - 1
+	}
+	if p99Index >= len(latencies) {
+		p99Index = len(latencies) - 1
+	}
+	p90Latency := 0
+	p99Latency := 0
+	if len(latencies) > 0 {
+		p90Latency = latencies[p90Index]
+		p99Latency = latencies[p99Index]
+	}
+
+	lastStatusByRegion, err := h.db.GetLastStatusByRegion(id)
+	if err != nil {
+		log.Printf("Failed to get last status by region: %v", err)
+		lastStatusByRegion = make(map[string]*models.CheckHistory)
+	}
+
+	regions := make([]models.RegionStats, 0, len(regionMap))
+	for _, rs := range regionMap {
+		rs.SuccessRate = float64(rs.SuccessCount) / float64(rs.TotalChecks) * 100
+		rs.AvgLatency = int(rs.TotalLatency / int64(rs.TotalChecks))
+		
+		if lastStatus, ok := lastStatusByRegion[rs.Region]; ok {
+			isUp := lastStatus.Success
+			rs.IsUp = &isUp
+			rs.LastCheckedAt = &lastStatus.CheckedAt
+		}
+		
+		regions = append(regions, *rs)
+	}
+
+	sort.Slice(regions, func(i, j int) bool {
+		return regions[i].Region < regions[j].Region
+	})
+
+	stats := models.CheckStats{
+		CheckID:      id,
+		TotalChecks:  totalChecks,
+		SuccessCount: successCount,
+		SuccessRate:  successRate,
+		AvgLatency:   avgLatency,
+		P90Latency:   p90Latency,
+		P99Latency:   p99Latency,
+		DownCount:    downCount,
+		Regions:      regions,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(stats)
 }
 
 func (h *Handlers) GetStats(w http.ResponseWriter, r *http.Request) {
@@ -1155,6 +1293,160 @@ func (h *Handlers) TriggerCheck(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "Check triggered successfully"})
+}
+
+func (h *Handlers) TriggerCheckForRegion(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseInt(vars["id"], 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	region := vars["region"]
+	if region == "" {
+		http.Error(w, "region is required", http.StatusBadRequest)
+		return
+	}
+
+	check, err := h.db.GetCheck(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	if check.Type == models.CheckTypeTailscale || check.Type == models.CheckTypeTailscaleService {
+		http.Error(w, "Tailscale checks cannot be triggered for specific regions", http.StatusBadRequest)
+		return
+	}
+
+	if h.sentinelServer != nil {
+		if broadcaster, ok := h.sentinelServer.(interface {
+			BroadcastCheckToRegion(check models.Check, region string)
+		}); ok {
+			broadcaster.BroadcastCheckToRegion(*check, region)
+		} else {
+			http.Error(w, "region-specific checks not supported", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		http.Error(w, "no sentinel server available", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": fmt.Sprintf("Check triggered for region %s", region)})
+}
+
+func (h *Handlers) GetProbes(w http.ResponseWriter, r *http.Request) {
+	probes, err := h.db.GetAllProbes()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(probes)
+}
+
+type CreateProbeRequest struct {
+	RegionCode string `json:"region_code"`
+	IPAddress  string `json:"ip_address,omitempty"`
+}
+
+type CreateProbeResponse struct {
+	Probe models.Probe `json:"probe"`
+	Token string       `json:"token"`
+}
+
+func (h *Handlers) CreateProbe(w http.ResponseWriter, r *http.Request) {
+	var req CreateProbeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if req.RegionCode == "" {
+		http.Error(w, "region_code is required", http.StatusBadRequest)
+		return
+	}
+
+	probeID, token, err := h.db.CreateProbe(req.RegionCode, req.IPAddress)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	probe, err := h.db.GetProbeByID(probeID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(CreateProbeResponse{
+		Probe: *probe,
+		Token: token,
+	})
+}
+
+func (h *Handlers) DeleteProbe(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseInt(vars["id"], 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	probe, err := h.db.GetProbeByID(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if probe == nil {
+		http.Error(w, "probe not found", http.StatusNotFound)
+		return
+	}
+
+	if err := h.db.DeleteProbe(id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type RegenerateTokenResponse struct {
+	Token string `json:"token"`
+}
+
+func (h *Handlers) RegenerateProbeToken(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseInt(vars["id"], 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	probe, err := h.db.GetProbeByID(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if probe == nil {
+		http.Error(w, "probe not found", http.StatusNotFound)
+		return
+	}
+
+	token, err := h.db.RegenerateProbeToken(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(RegenerateTokenResponse{Token: token})
 }
 
 func (h *Handlers) StreamCheckUpdates(w http.ResponseWriter, r *http.Request) {

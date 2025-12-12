@@ -31,29 +31,38 @@ export function HistoryModal({
   const [filterStatus, setFilterStatus] = useState<'all' | 'success' | 'failed'>(
     'all'
   );
+  const [filterRegion, setFilterRegion] = useState<string>('all');
+
+  // Get unique regions
+  const regions = Array.from(
+    new Set(history.filter((h: CheckStatus) => h).map((h: CheckStatus) => h.region).filter(Boolean))
+  ).sort() as string[];
 
   // Filter history
   const filteredHistory = history.filter((log: CheckStatus) => {
+    if (!log) return false;
     if (filterStatus === 'success' && !log.success) return false;
     if (filterStatus === 'failed' && log.success) return false;
     if (searchTerm) {
       const search = searchTerm.toLowerCase();
       return (
         log.error_message?.toLowerCase().includes(search) ||
-        log.actual_value?.toLowerCase().includes(search)
+        log.actual_value?.toLowerCase().includes(search) ||
+        log.region?.toLowerCase().includes(search)
       );
     }
     return true;
   });
 
   // Calculate stats
-  const totalChecks = history.length;
-  const successCount = history.filter((l: CheckStatus) => l.success).length;
+  const validHistory = history.filter((l: CheckStatus) => l);
+  const totalChecks = validHistory.length;
+  const successCount = validHistory.filter((l: CheckStatus) => l.success).length;
   const failCount = totalChecks - successCount;
   const successRate = totalChecks > 0 ? (successCount / totalChecks) * 100 : 0;
   const avgResponseTime =
     totalChecks > 0
-      ? history.reduce((sum: number, l: CheckStatus) => sum + l.response_time_ms, 0) / totalChecks
+      ? validHistory.reduce((sum: number, l: CheckStatus) => sum + (l.response_time_ms || 0), 0) / totalChecks
       : 0;
 
   return (
@@ -136,6 +145,35 @@ export function HistoryModal({
             </button>
           ))}
         </div>
+        {regions.length > 0 && (
+          <div className="flex gap-1">
+            <button
+              onClick={() => setFilterRegion('all')}
+              className={cn(
+                'px-3 py-1 text-[10px] uppercase tracking-widest rounded transition',
+                filterRegion === 'all'
+                  ? 'bg-terminal-cyan/20 text-terminal-cyan'
+                  : 'text-terminal-muted hover:text-terminal-text'
+              )}
+            >
+              all regions
+            </button>
+            {regions.map((region) => (
+              <button
+                key={region}
+                onClick={() => setFilterRegion(region)}
+                className={cn(
+                  'px-3 py-1 text-[10px] uppercase tracking-widest rounded transition',
+                  filterRegion === region
+                    ? 'bg-terminal-cyan/20 text-terminal-cyan'
+                    : 'text-terminal-muted hover:text-terminal-text'
+                )}
+              >
+                {region}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* History List */}
@@ -195,8 +233,15 @@ function HistoryLogItem({ log }: HistoryLogItemProps) {
             pulse={false}
           />
           <div>
-            <div className="text-sm font-mono">
-              {formatDate(log.checked_at)}
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-mono">
+                {formatDate(log.checked_at)}
+              </div>
+              {log.region && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-terminal-cyan/20 text-terminal-cyan">
+                  {log.region}
+                </span>
+              )}
             </div>
             {log.error_message && (
               <div
@@ -237,6 +282,9 @@ function HistoryLogItem({ log }: HistoryLogItemProps) {
           )}
           {log.actual_value && (
             <DetailRow label="Actual Value" value={log.actual_value} />
+          )}
+          {log.region && (
+            <DetailRow label="Region" value={log.region} />
           )}
           {log.response_body && (
             <div>

@@ -12,16 +12,19 @@ import (
 )
 
 type Engine struct {
-	db        *db.Database
-	notifiers []notifier.Notifier
-	checks    map[int64]*checkState
-	mu        sync.RWMutex
-	ctx       context.Context
-	cancel    context.CancelFunc
-	wg        sync.WaitGroup
-	broadcast chan *CheckResultEvent
-	clients   map[chan *CheckResultEvent]bool
-	clientsMu sync.RWMutex
+	db            *db.Database
+	notifiers     []notifier.Notifier
+	checks        map[int64]*checkState
+	mu            sync.RWMutex
+	ctx           context.Context
+	cancel        context.CancelFunc
+	wg            sync.WaitGroup
+	broadcast     chan *CheckResultEvent
+	clients       map[chan *CheckResultEvent]bool
+	clientsMu     sync.RWMutex
+	sentinelServer interface {
+		BroadcastCheckFull(check models.Check)
+	}
 }
 
 type CheckResultEvent struct {
@@ -52,6 +55,12 @@ func NewEngine(database *db.Database, notifiers []notifier.Notifier) *Engine {
 	}
 	go e.broadcaster()
 	return e
+}
+
+func (e *Engine) SetSentinelServer(sentinelServer interface {
+	BroadcastCheckFull(check models.Check)
+}) {
+	e.sentinelServer = sentinelServer
 }
 
 func (e *Engine) Start() error {
@@ -167,7 +176,7 @@ func (e *Engine) performCheck(state *checkState) {
 
 	var history models.CheckHistory
 	for attempt := 0; attempt <= retries; attempt++ {
-		h := models.CheckHistory{CheckID: check.ID, CheckedAt: time.Now()}
+		h := models.CheckHistory{CheckID: check.ID, CheckedAt: time.Now().UTC()}
 		start := time.Now()
 
 		switch check.Type {
@@ -226,10 +235,15 @@ func (e *Engine) performCheck(state *checkState) {
 	state.lastStatus = &history
 
 	// Broadcast the result to SSE clients
-	e.broadcastCheckResult(check, &history)
+	e.BroadcastCheckResult(check, &history)
+
+	// Broadcast to probes (skip Tailscale checks as they require local Tailscale access)
+	if e.sentinelServer != nil && check.Type != models.CheckTypeTailscale && check.Type != models.CheckTypeTailscaleService {
+		e.sentinelServer.BroadcastCheckFull(check)
+	}
 }
 
-func (e *Engine) broadcastCheckResult(check models.Check, history *models.CheckHistory) {
+func (e *Engine) BroadcastCheckResult(check models.Check, history *models.CheckHistory) {
 	event := &CheckResultEvent{
 		CheckID:       check.ID,
 		Check:         check,

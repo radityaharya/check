@@ -153,17 +153,6 @@ type Check struct {
 	SnapshotError   string     `json:"snapshot_error,omitempty"`
 }
 
-type CheckHistory struct {
-	ID             int64     `json:"id"`
-	CheckID        int64     `json:"check_id"`
-	StatusCode     int       `json:"status_code"`
-	ResponseTimeMs int       `json:"response_time_ms"`
-	Success        bool      `json:"success"`
-	ErrorMessage   string    `json:"error_message,omitempty"`
-	CheckedAt      time.Time `json:"checked_at"`
-	ResponseBody   string    `json:"response_body,omitempty"`
-}
-
 type CheckWithStatus struct {
 	Check
 	LastStatus    *CheckHistory  `json:"last_status,omitempty"`
@@ -186,6 +175,29 @@ type Stats struct {
 	UpChecks     int     `json:"up_checks"`
 	DownChecks   int     `json:"down_checks"`
 	TotalUptime  float64 `json:"total_uptime"`
+}
+
+type RegionStats struct {
+	Region        string     `json:"region"`
+	TotalChecks   int        `json:"total_checks"`
+	SuccessCount  int        `json:"success_count"`
+	SuccessRate   float64    `json:"success_rate"`
+	AvgLatency    int        `json:"avg_latency"`
+	TotalLatency  int64      `json:"total_latency"`
+	IsUp          *bool      `json:"is_up,omitempty"`
+	LastCheckedAt *time.Time `json:"last_checked_at,omitempty"`
+}
+
+type CheckStats struct {
+	CheckID      int64         `json:"check_id"`
+	TotalChecks  int           `json:"total_checks"`
+	SuccessCount int           `json:"success_count"`
+	SuccessRate  float64       `json:"success_rate"`
+	AvgLatency   int           `json:"avg_latency"`
+	P90Latency   int           `json:"p90_latency"`
+	P99Latency   int           `json:"p99_latency"`
+	DownCount    int           `json:"down_count"`
+	Regions      []RegionStats `json:"regions"`
 }
 
 type CreateCheckRequest struct {
@@ -334,4 +346,26 @@ type WebAuthnCredential struct {
 	CloneWarning    bool      `json:"clone_warning"`
 	Name            string    `json:"name"`
 	CreatedAt       time.Time `json:"created_at"`
+}
+
+type Probe struct {
+	ID         int64      `json:"id"`
+	RegionCode string    `json:"region_code"`
+	IPAddress  string    `json:"ip_address,omitempty"`
+	Version    string    `json:"version,omitempty"`
+	Status     string    `json:"status"`
+	LastSeenAt *time.Time `json:"last_seen_at,omitempty"`
+}
+
+type CheckHistory struct {
+	ID             int64     `json:"id"`
+	CheckID        int64     `json:"check_id"`
+	StatusCode     int       `json:"status_code"`
+	ResponseTimeMs int       `json:"response_time_ms"`
+	Success        bool      `json:"success"`
+	ErrorMessage   string    `json:"error_message,omitempty"`
+	CheckedAt      time.Time `json:"checked_at"`
+	ResponseBody   string    `json:"response_body,omitempty"`
+	ProbeID        *int64    `json:"probe_id,omitempty"`
+	Region         string    `json:"region,omitempty"`
 }

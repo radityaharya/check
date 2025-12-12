@@ -3,10 +3,15 @@ module gocheck
 go 1.25.5
 
 require (
+	github.com/go-webauthn/webauthn v0.15.0
 	github.com/gorilla/mux v1.8.1
 	github.com/lib/pq v1.10.9
 	github.com/mattn/go-sqlite3 v1.14.32
+	golang.org/x/crypto v0.45.0
+	google.golang.org/grpc v1.77.0
+	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
+	tailscale.com v1.92.1
 	tailscale.com/client/tailscale/v2 v2.3.0
 )
 
@@ -16,13 +21,11 @@ require (
 	github.com/alexbrainman/sspi v0.0.0-20231016080023-1a75b4708caa // indirect
 	github.com/coder/websocket v1.8.12 // indirect
 	github.com/creachadair/msync v0.7.1 // indirect
-	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dblohm7/wingoes v0.0.0-20240119213807-a09d6be7affa // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/gaissmai/bart v0.18.0 // indirect
 	github.com/go-json-experiment/json v0.0.0-20250813024750-ebf49471dced // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
-	github.com/go-webauthn/webauthn v0.15.0 // indirect
 	github.com/go-webauthn/x v0.1.26 // indirect
 	github.com/godbus/dbus/v5 v5.1.1-0.20230522191255-76236955d466 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.0 // indirect
@@ -38,7 +41,6 @@ require (
 	github.com/mdlayher/socket v0.5.0 // indirect
 	github.com/mitchellh/go-ps v1.0.0 // indirect
 	github.com/pires/go-proxyproto v0.8.1 // indirect
-	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus-community/pro-bing v0.4.0 // indirect
 	github.com/safchain/ethtool v0.3.0 // indirect
 	github.com/tailscale/certstore v0.1.1-0.20231202035212-d3fa0460f47e // indirect
@@ -51,10 +53,9 @@ require (
 	github.com/x448/float16 v0.8.4 // indirect
 	go4.org/mem v0.0.0-20240501181205-ae6ca9944745 // indirect
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
-	golang.org/x/crypto v0.45.0 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
 	golang.org/x/net v0.47.0 // indirect
-	golang.org/x/oauth2 v0.31.0 // indirect
+	golang.org/x/oauth2 v0.32.0 // indirect
 	golang.org/x/sync v0.18.0 // indirect
 	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/term v0.37.0 // indirect
@@ -62,6 +63,6 @@ require (
 	golang.org/x/time v0.11.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	golang.zx2c4.com/wireguard/windows v0.5.3 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251022142026-3a174f9686a8 // indirect
 	gvisor.dev/gvisor v0.0.0-20250205023644-9414b50a5633 // indirect
-	tailscale.com v1.92.1 // indirect
 )

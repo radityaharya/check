@@ -6,6 +6,7 @@ import type {
   CheckFormData,
   CheckStatus,
   Stats,
+  CheckStats,
   TimeRange,
 } from '@/types';
 import { useSelectedCheckId, useTimeRange } from '@/store';
@@ -28,6 +29,14 @@ async function fetchCheckHistory(checkId: number, range: TimeRange, limit = 500)
     `/api/checks/${checkId}/history?limit=${limit}&range=${encodeURIComponent(range)}`
   );
   if (!response.ok) throw new Error('Failed to fetch history');
+  return response.json();
+}
+
+async function fetchCheckStats(checkId: number, range: TimeRange): Promise<CheckStats> {
+  const response = await fetch(
+    `/api/checks/${checkId}/stats?range=${encodeURIComponent(range)}`
+  );
+  if (!response.ok) throw new Error('Failed to fetch stats');
   return response.json();
 }
 
@@ -131,6 +140,15 @@ export function useCheckHistory(checkId: number | null, range: TimeRange) {
   });
 }
 
+export function useCheckStats(checkId: number | null, range: TimeRange) {
+  return useQuery({
+    queryKey: ['check-stats', checkId, range],
+    queryFn: () => fetchCheckStats(checkId!, range),
+    enabled: !!checkId,
+    staleTime: 1000 * 30,
+  });
+}
+
 export function useCreateCheck() {
   const queryClient = useQueryClient();
 
@@ -164,6 +182,27 @@ export function useDeleteCheck() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['checks'] });
       queryClient.invalidateQueries({ queryKey: ['stats'] });
+    },
+  });
+}
+
+export function useTriggerCheckForRegion() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ checkId, region }: { checkId: number; region: string }) => {
+      const response = await fetch(`/api/checks/${checkId}/trigger/${encodeURIComponent(region)}`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error || 'Failed to trigger check for region');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['checks'] });
+      queryClient.invalidateQueries({ queryKey: ['checkHistory'] });
+      queryClient.invalidateQueries({ queryKey: ['checkStats'] });
     },
   });
 }
