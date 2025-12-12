@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en" id="html-root">
 
 <head>
   <meta charset="UTF-8">
@@ -13,6 +13,17 @@
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap"
     rel="stylesheet">
   <script>
+    (function () {
+      const savedTheme = localStorage.getItem('gocheck_theme') || 'dark';
+      const htmlRoot = document.getElementById('html-root');
+      if (savedTheme === 'dark') {
+        htmlRoot.classList.add('dark');
+      } else {
+        htmlRoot.classList.remove('dark');
+      }
+    })();
+  </script>
+  <script>
     tailwind.config = {
       darkMode: 'class',
       theme: {
@@ -22,17 +33,17 @@
           },
           colors: {
             terminal: {
-              bg: '#050507',
-              surface: '#0c0c12',
-              border: '#151520',
-              muted: '#606478',
-              text: '#e5e7ef',
-              green: '#c4a7e7',
-              red: '#f38ba8',
-              yellow: '#f9e2af',
-              blue: '#7aa2f7',
-              purple: '#b794f6',
-              cyan: '#94e2d5',
+              bg: 'rgb(var(--t-bg) / <alpha-value>)',
+              surface: 'rgb(var(--t-surface) / <alpha-value>)',
+              border: 'rgb(var(--t-border) / <alpha-value>)',
+              muted: 'rgb(var(--t-muted) / <alpha-value>)',
+              text: 'rgb(var(--t-text) / <alpha-value>)',
+              green: 'rgb(var(--t-green) / <alpha-value>)',
+              red: 'rgb(var(--t-red) / <alpha-value>)',
+              yellow: 'rgb(var(--t-yellow) / <alpha-value>)',
+              blue: 'rgb(var(--t-blue) / <alpha-value>)',
+              purple: 'rgb(var(--t-purple) / <alpha-value>)',
+              cyan: 'rgb(var(--t-cyan) / <alpha-value>)',
             }
           }
         }
@@ -40,6 +51,40 @@
     }
   </script>
   <style>
+    :root {
+      --t-bg: 248 250 252;
+      --t-surface: 255 255 255;
+      --t-border: 226 232 240;
+      --t-text: 15 23 42;
+      --t-muted: 71 85 105;
+      --t-green: 196 167 231;
+      --t-red: 243 139 168;
+      --t-yellow: 249 226 175;
+      --t-blue: 122 162 247;
+      --t-purple: 183 148 246;
+      --t-cyan: 148 226 213;
+      --t-scroll-track: rgb(var(--t-border));
+      --t-scroll-thumb: #94a3b8;
+      --t-scroll-thumb-hover: #64748b;
+    }
+
+    html.dark {
+      --t-bg: 5 5 7;
+      --t-surface: 12 12 18;
+      --t-border: 21 21 32;
+      --t-text: 229 231 239;
+      --t-muted: 96 100 120;
+      --t-green: 196 167 231;
+      --t-red: 243 139 168;
+      --t-yellow: 249 226 175;
+      --t-blue: 122 162 247;
+      --t-purple: 183 148 246;
+      --t-cyan: 148 226 213;
+      --t-scroll-track: rgb(var(--t-surface));
+      --t-scroll-thumb: #303443;
+      --t-scroll-thumb-hover: #3c4051;
+    }
+
     [x-cloak] {
       display: none !important;
     }
@@ -50,16 +95,16 @@
     }
 
     ::-webkit-scrollbar-track {
-      background: #0c0c12;
+      background: var(--t-scroll-track);
     }
 
     ::-webkit-scrollbar-thumb {
-      background: #303443;
+      background: var(--t-scroll-thumb);
       border-radius: 3px;
     }
 
     ::-webkit-scrollbar-thumb:hover {
-      background: #3c4051;
+      background: var(--t-scroll-thumb-hover);
     }
 
     .glow-green {
@@ -89,7 +134,10 @@
     .skeleton {
       position: relative;
       overflow: hidden;
-      background: linear-gradient(90deg, rgba(48, 52, 67, 0.3) 25%, rgba(60, 64, 81, 0.6) 45%, rgba(48, 52, 67, 0.3) 65%);
+      background: linear-gradient(90deg,
+          rgb(var(--t-border) / 0.30) 25%,
+          rgb(var(--t-border) / 0.55) 45%,
+          rgb(var(--t-border) / 0.30) 65%);
       background-size: 400% 100%;
       animation: shimmer 1.4s ease-in-out infinite;
     }
@@ -108,6 +156,22 @@
 
 <body class="bg-terminal-bg text-terminal-text font-mono min-h-screen">
   <div x-data="app()" class="min-h-screen" x-cloak>
+    <!-- Toast -->
+    <div class="fixed top-4 right-4 z-[60]" x-show="toast.visible" x-transition.opacity.duration.150ms x-cloak>
+      <div class="max-w-sm bg-terminal-surface border border-terminal-border rounded-lg shadow-2xl px-4 py-3">
+        <div class="flex items-start gap-3">
+          <div class="mt-1 w-2.5 h-2.5 rounded-full flex-shrink-0"
+            :class="toast.type === 'success' ? 'bg-terminal-green' : (toast.type === 'error' ? 'bg-terminal-red' : 'bg-terminal-muted')">
+          </div>
+          <div class="min-w-0">
+            <div class="text-sm text-terminal-text" x-text="toast.message"></div>
+          </div>
+          <button type="button" class="text-terminal-muted hover:text-terminal-text leading-none"
+            @click="hideToast()">&times;</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Initial Setup Screen -->
     <div x-show="!authChecked" class="flex items-center justify-center min-h-screen">
       <div class="text-terminal-muted">
@@ -224,6 +288,20 @@
               <span class="w-2 h-2 rounded-full"
                 :class="isLive ? 'bg-terminal-green pulse-dot' : 'bg-terminal-muted'"></span>
             </div>
+            <button @click="toggleTheme()"
+              class="text-terminal-muted hover:text-terminal-text transition p-2 rounded hover:bg-terminal-border"
+              :title="isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'">
+              <svg x-show="isDarkMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z">
+                </path>
+              </svg>
+              <svg x-show="!isDarkMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z">
+                </path>
+              </svg>
+            </button>
             <button @click="showSettingsModal = true"
               class="text-terminal-muted hover:text-terminal-text transition p-2 rounded hover:bg-terminal-border"
               title="Settings">
@@ -267,14 +345,36 @@
         </div>
 
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10" x-show="stats && hasLoaded" x-cloak>
-          <div class="col-span-full flex flex-wrap items-center gap-2 text-xs mb-2">
-            <span class="text-terminal-muted uppercase tracking-widest">Time Range</span>
-            <template x-for="range in ranges" :key="range">
-              <button type="button" @click="setTimeRange(range)"
-                class="px-3 py-1 rounded border text-[10px] uppercase tracking-wide"
-                :class="timeRange === range ? 'border-terminal-green text-terminal-green' : 'border-terminal-border text-terminal-muted hover:text-terminal-text'"
-                x-text="range"></button>
-            </template>
+          <div class="col-span-full flex flex-wrap items-center justify-between gap-3 text-xs mb-2">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-terminal-muted uppercase tracking-widest">Time Range</span>
+              <template x-for="range in ranges" :key="range">
+                <button type="button" @click="setTimeRange(range)"
+                  class="px-3 py-1 rounded border text-[10px] uppercase tracking-wide"
+                  :class="timeRange === range ? 'border-terminal-green text-terminal-green' : 'border-terminal-border text-terminal-muted hover:text-terminal-text'"
+                  x-text="range"></button>
+              </template>
+            </div>
+
+            <div class="flex items-center gap-3 flex-wrap">
+              <div class="flex items-center gap-2 text-sm text-terminal-muted">
+                <span class="text-terminal-green">$</span> monitors
+              </div>
+              <div class="flex gap-2">
+                <button @click="showGroupModal = true"
+                  class="bg-terminal-border text-terminal-text px-4 py-2 rounded text-sm font-bold hover:bg-terminal-muted transition flex items-center gap-2">
+                  <span>+</span> group
+                </button>
+                <button @click="showTagModal = true"
+                  class="bg-terminal-border text-terminal-text px-4 py-2 rounded text-sm font-bold hover:bg-terminal-muted transition flex items-center gap-2">
+                  <span>+</span> tag
+                </button>
+                <button @click="openAddModal()"
+                  class="bg-terminal-green text-terminal-bg px-4 py-2 rounded text-sm font-bold hover:opacity-90 transition flex items-center gap-2">
+                  <span>+</span> monitor
+                </button>
+              </div>
+            </div>
           </div>
           <div
             class="bg-terminal-surface border border-terminal-border rounded-lg p-4 hover:border-terminal-muted transition">
@@ -300,201 +400,346 @@
           </div>
         </div>
 
-        <div class="flex justify-between items-center mb-6 flex-wrap gap-4">
-          <div class="flex items-center gap-2 text-sm text-terminal-muted">
-            <span class="text-terminal-green">$</span> monitors
-          </div>
-          <div class="flex gap-2">
-            <button @click="showGroupModal = true"
-              class="bg-terminal-border text-terminal-text px-4 py-2 rounded text-sm font-bold hover:bg-terminal-muted transition flex items-center gap-2">
-              <span>+</span> group
-            </button>
-            <button @click="showTagModal = true"
-              class="bg-terminal-border text-terminal-text px-4 py-2 rounded text-sm font-bold hover:bg-terminal-muted transition flex items-center gap-2">
-              <span>+</span> tag
-            </button>
-            <button @click="openAddModal()"
-              class="bg-terminal-green text-terminal-bg px-4 py-2 rounded text-sm font-bold hover:opacity-90 transition flex items-center gap-2">
-              <span>+</span> monitor
-            </button>
-          </div>
-        </div>
+        <div class="lg:grid lg:grid-cols-12 gap-6">
+          <section class="lg:col-span-7">
 
-        <!-- Grouped Monitors -->
-        <div class="space-y-6" x-show="!hasLoaded" x-cloak>
-          <template x-for="i in skeletonGroupCount" :key="i">
-            <div class="bg-terminal-surface border border-terminal-border rounded-lg overflow-hidden">
-              <div class="flex items-center gap-4 p-4 border-b border-terminal-border">
-                <div class="w-1 h-8 rounded skeleton"></div>
-                <div class="w-2.5 h-2.5 rounded-full skeleton"></div>
-                <div class="flex-grow">
-                  <div class="flex items-center gap-3">
-                    <div class="h-4 w-32 rounded skeleton"></div>
-                    <div class="h-4 w-20 rounded skeleton"></div>
+            <!-- Grouped Monitors -->
+            <div class="bg-terminal-surface border border-terminal-border rounded-lg overflow-hidden"
+              x-show="!hasLoaded" x-cloak>
+              <template x-for="i in skeletonGroupCount" :key="i">
+                <div class="border-b border-terminal-border last:border-b-0">
+                  <div class="flex items-center gap-4 p-4 border-b border-terminal-border">
+                    <div class="w-1 h-8 rounded skeleton"></div>
+                    <div class="w-2.5 h-2.5 rounded-full skeleton"></div>
+                    <div class="flex-grow">
+                      <div class="flex items-center gap-3">
+                        <div class="h-4 w-32 rounded skeleton"></div>
+                        <div class="h-4 w-20 rounded skeleton"></div>
+                      </div>
+                    </div>
+                    <div class="h-5 w-5 rounded skeleton"></div>
+                  </div>
+                  <div class="divide-y divide-terminal-border">
+                    <template x-for="j in skeletonCheckCount" :key="j">
+                      <div class="p-4">
+                        <div class="flex items-center gap-4">
+                          <div class="w-2.5 h-2.5 rounded-full skeleton"></div>
+                          <div class="flex-grow">
+                            <div class="h-4 w-40 rounded skeleton mb-2"></div>
+                            <div class="h-3 w-64 rounded skeleton"></div>
+                          </div>
+                          <div class="hidden sm:block h-4 w-12 rounded skeleton"></div>
+                          <div class="hidden sm:block h-4 w-16 rounded skeleton"></div>
+                        </div>
+                      </div>
+                    </template>
                   </div>
                 </div>
-                <div class="h-5 w-5 rounded skeleton"></div>
-              </div>
-              <div class="divide-y divide-terminal-border">
-                <template x-for="j in skeletonCheckCount" :key="j">
-                  <div class="p-4">
-                    <div class="flex items-center gap-4">
-                      <div class="w-2.5 h-2.5 rounded-full skeleton"></div>
-                      <div class="flex-grow">
-                        <div class="h-4 w-40 rounded skeleton mb-2"></div>
-                        <div class="h-3 w-64 rounded skeleton"></div>
+              </template>
+            </div>
+
+            <div class="bg-terminal-surface border border-terminal-border rounded-lg overflow-hidden"
+              x-show="hasLoaded">
+              <template x-for="group in groupedChecks" :key="group.id">
+                <div class="border-b border-terminal-border last:border-b-0">
+                  <!-- Group Header -->
+                  <div
+                    class="flex items-center gap-4 p-4 cursor-pointer border-b border-terminal-border hover:bg-terminal-border/30 transition"
+                    @click="toggleGroupExpand(group.id)">
+                    <div class="w-1 h-8 rounded" :class="group.is_up ? 'bg-terminal-green' : 'bg-terminal-red'"></div>
+                    <div class="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                      :class="group.is_up ? 'bg-terminal-green' : 'bg-terminal-red glow-red'"></div>
+                    <div class="flex-grow">
+                      <div class="flex items-center gap-3">
+                        <span class="font-bold text-terminal-text" x-text="group.name"></span>
+                        <span class="text-[10px] px-2 py-0.5 rounded bg-terminal-border text-terminal-muted"
+                          x-text="group.checks.length + ' monitors'"></span>
+                        <span x-show="!group.is_up"
+                          class="text-[10px] px-2 py-0.5 rounded bg-terminal-red/20 text-terminal-red"
+                          x-text="group.down_count + ' down'"></span>
                       </div>
-                      <div class="hidden sm:block h-4 w-12 rounded skeleton"></div>
-                      <div class="hidden sm:block h-4 w-16 rounded skeleton"></div>
+                    </div>
+                    <div class="flex items-center gap-4 flex-shrink-0">
+                      <button @click.stop="editGroup(group)" x-show="group.id !== 0"
+                        class="text-terminal-muted hover:text-terminal-text p-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z">
+                          </path>
+                        </svg>
+                      </button>
+                      <svg class="w-5 h-5 text-terminal-muted transition-transform"
+                        :class="expandedGroups.includes(group.id) ? '' : '-rotate-90'" fill="none" stroke="currentColor"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                      </svg>
                     </div>
                   </div>
-                </template>
-              </div>
-            </div>
-          </template>
-        </div>
 
-        <div class="space-y-6" x-show="hasLoaded">
-          <template x-for="group in groupedChecks" :key="group.id">
-            <div class="bg-terminal-surface border border-terminal-border rounded-lg overflow-hidden">
-              <!-- Group Header -->
-              <div
-                class="flex items-center gap-4 p-4 cursor-pointer border-b border-terminal-border hover:bg-terminal-border/30 transition"
-                @click="toggleGroupExpand(group.id)">
-                <div class="w-1 h-8 rounded" :class="group.is_up ? 'bg-terminal-green' : 'bg-terminal-red'"></div>
-                <div class="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                  :class="group.is_up ? 'bg-terminal-green' : 'bg-terminal-red glow-red'"></div>
-                <div class="flex-grow">
-                  <div class="flex items-center gap-3">
-                    <span class="font-bold text-terminal-text" x-text="group.name"></span>
-                    <span class="text-[10px] px-2 py-0.5 rounded bg-terminal-border text-terminal-muted"
-                      x-text="group.checks.length + ' monitors'"></span>
-                    <span x-show="!group.is_up"
-                      class="text-[10px] px-2 py-0.5 rounded bg-terminal-red/20 text-terminal-red"
-                      x-text="group.down_count + ' down'"></span>
-                  </div>
-                </div>
-                <div class="flex items-center gap-4 flex-shrink-0">
-                  <button @click.stop="editGroup(group)" x-show="group.id !== 0"
-                    class="text-terminal-muted hover:text-terminal-text p-1">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z">
-                      </path>
-                    </svg>
-                  </button>
-                  <svg class="w-5 h-5 text-terminal-muted transition-transform"
-                    :class="expandedGroups.includes(group.id) ? '' : '-rotate-90'" fill="none" stroke="currentColor"
-                    viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                  </svg>
-                </div>
-              </div>
-
-              <!-- Group Checks -->
-              <div x-show="expandedGroups.includes(group.id)" x-collapse>
-                <div class="divide-y divide-terminal-border">
-                  <template x-for="check in group.checks" :key="check.id">
-                    <div class="group hover:bg-terminal-border/20 transition">
-                      <div class="flex items-center gap-4 p-4 cursor-pointer" @click="toggleExpand(check.id)"
-                        :class="!check.enabled && 'opacity-60'">
-                        <div class="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                          :class="!check.enabled ? 'bg-terminal-yellow' : (check.is_up ? 'bg-terminal-green glow-green' : 'bg-terminal-red glow-red')">
-                        </div>
-                        <div class="flex-grow min-w-0">
-                          <div class="flex items-center gap-2 flex-wrap">
-                            <span class="font-bold text-terminal-text truncate" x-text="check.name"></span>
-                            <span x-show="!check.enabled"
-                              class="text-[10px] px-2 py-0.5 rounded uppercase font-bold flex-shrink-0 bg-terminal-yellow/20 text-terminal-yellow">paused</span>
-                            <span class="text-[10px] px-2 py-0.5 rounded uppercase font-bold flex-shrink-0"
-                              :class="getCheckTypeClass(check.type)" x-text="check.type"></span>
-                            <template x-for="tag in (check.tags || [])" :key="tag.id">
-                              <span class="text-[10px] px-2 py-0.5 rounded flex-shrink-0"
-                                :style="`background: ${tag.color}20; color: ${tag.color}`" x-text="tag.name"></span>
-                            </template>
-                          </div>
-                          <div class="text-xs text-terminal-muted truncate" x-text="getCheckTarget(check)"></div>
-                        </div>
-                        <div class="flex items-center gap-6 flex-shrink-0">
-                          <div class="text-right hidden sm:block">
-                            <div class="text-xs text-terminal-muted">latency</div>
-                            <div class="font-bold"
-                              :class="(check.last_status?.response_time_ms || 0) > 1000 ? 'text-terminal-yellow' : 'text-terminal-text'"
-                              x-text="(check.last_status?.response_time_ms || 0) + 'ms'"></div>
-                          </div>
-                          <div class="text-right hidden sm:block">
-                            <div class="text-xs text-terminal-muted">checked</div>
-                            <div x-text="timeAgo(check.last_checked_at)"></div>
-                          </div>
-                          <svg class="w-5 h-5 text-terminal-muted transition-transform"
-                            :class="expandedChecks.includes(check.id) ? 'rotate-180' : ''" fill="none"
-                            stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7">
-                            </path>
-                          </svg>
-                        </div>
-                      </div>
-
-                      <div x-show="expandedChecks.includes(check.id)" x-collapse
-                        class="border-t border-terminal-border bg-terminal-bg/50">
-                        <div class="p-5">
-                          <div class="h-24 w-full mb-4 relative" :data-check-id="check.id"
-                            x-effect="if(expandedChecks.includes(check.id) && check.history) { renderChart($el, check.history, check.is_up); }"
-                            x-init="$watch('timeRange', () => { if(expandedChecks.includes(check.id)) { setTimeout(() => { const updatedCheck = groupedChecks.flatMap(g => g.checks || []).find(c => c.id === check.id); if(updatedCheck && updatedCheck.history) renderChart($el, updatedCheck.history, updatedCheck.is_up); }, 200); } });">
-                            <canvas class="w-full h-full"></canvas>
-                          </div>
-                          <div class="flex justify-between items-center text-xs mb-3">
-                            <span class="text-terminal-muted">response time history</span>
-                            <span class="text-terminal-muted">interval: <span class="text-terminal-text"
-                                x-text="check.interval_seconds + 's'"></span></span>
-                          </div>
-                          <div
-                            class="flex gap-[2px] h-5 w-full rounded bg-terminal-border/50 mb-4 overflow-visible relative">
-                            <template x-for="(status, index) in getStatusBar(check.history, check)" :key="index">
-                              <div
-                                class="flex-1 h-full transition-all hover:opacity-70 cursor-pointer relative group/bar"
-                                :class="status.success ? 'bg-terminal-green' : (status.empty ? 'bg-terminal-border' : 'bg-terminal-red')">
-                                <div
-                                  class="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-terminal-bg border border-terminal-border text-[10px] px-2 py-1 rounded opacity-0 group-hover/bar:opacity-100 pointer-events-none whitespace-nowrap z-10">
-                                  <span x-text="status.empty ? 'N/A' : (status.success ? 'UP' : 'DOWN')"></span>
-                                  <span class="text-terminal-muted mx-1">|</span>
-                                  <span class="text-terminal-muted" x-text="status.time || ''"></span>
-                                </div>
+                  <!-- Group Checks -->
+                  <div x-show="expandedGroups.includes(group.id)" x-collapse>
+                    <div class="divide-y divide-terminal-border">
+                      <template x-for="check in group.checks" :key="check.id">
+                        <div class="group hover:bg-terminal-border/20 transition"
+                          :class="twoPane && selectedCheck && selectedCheck.id === check.id ? 'bg-terminal-border/20' : ''">
+                          <div class="flex items-center gap-4 p-4 cursor-pointer" @click="handleCheckRowClick(check)"
+                            :class="!check.enabled && 'opacity-60'">
+                            <div class="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                              :class="!check.enabled ? 'bg-terminal-yellow' : (check.is_up ? 'bg-terminal-green glow-green' : 'bg-terminal-red glow-red')">
+                            </div>
+                            <div class="flex-grow min-w-0">
+                              <div class="flex items-center gap-2 flex-wrap">
+                                <span class="font-bold text-terminal-text truncate" x-text="check.name"></span>
+                                <span x-show="!check.enabled"
+                                  class="text-[10px] px-2 py-0.5 rounded uppercase font-bold flex-shrink-0 bg-terminal-yellow/20 text-terminal-yellow">paused</span>
+                                <span class="text-[10px] px-2 py-0.5 rounded uppercase font-bold flex-shrink-0"
+                                  :class="getCheckTypeClass(check.type)" x-text="check.type"></span>
+                                <template x-for="tag in (check.tags || [])" :key="tag.id">
+                                  <span class="text-[10px] px-2 py-0.5 rounded flex-shrink-0"
+                                    :style="`background: ${tag.color}20; color: ${tag.color}`" x-text="tag.name"></span>
+                                </template>
                               </div>
-                            </template>
+                              <div class="text-xs text-terminal-muted truncate" x-text="getCheckTarget(check)"></div>
+                            </div>
+                            <div class="flex items-center gap-6 flex-shrink-0">
+                              <div class="text-right hidden sm:block">
+                                <div class="text-xs text-terminal-muted">latency</div>
+                                <div class="font-bold"
+                                  :class="(check.last_status?.response_time_ms || 0) > 1000 ? 'text-terminal-yellow' : 'text-terminal-text'"
+                                  x-text="(check.last_status?.response_time_ms || 0) + 'ms'"></div>
+                              </div>
+                              <div class="text-right hidden sm:block">
+                                <div class="text-xs text-terminal-muted">checked</div>
+                                <div x-text="timeAgo(check.last_checked_at)"></div>
+                              </div>
+                              <button type="button" class="p-1 text-terminal-muted hover:text-terminal-text"
+                                x-show="!twoPane" @click.stop="toggleExpand(check.id)"
+                                :title="expandedChecks.includes(check.id) ? 'Collapse' : 'Expand'">
+                                <svg class="w-5 h-5 transition-transform"
+                                  :class="expandedChecks.includes(check.id) ? 'rotate-180' : ''" fill="none"
+                                  stroke="currentColor" viewBox="0 0 24 24">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                              </button>
+                            </div>
                           </div>
-                          <div class="flex gap-2">
-                            <button @click.stop="triggerCheckNow(check.id)"
-                              class="text-[10px] bg-terminal-green/20 hover:bg-terminal-green/30 text-terminal-green px-3 py-1.5 rounded uppercase tracking-wide"
-                              :disabled="!check.enabled">check now</button>
-                            <button @click.stop="toggleCheckEnabled(check)"
-                              class="text-[10px] px-3 py-1.5 rounded uppercase tracking-wide"
-                              :class="check.enabled ? 'bg-terminal-yellow/20 hover:bg-terminal-yellow/30 text-terminal-yellow' : 'bg-terminal-green/20 hover:bg-terminal-green/30 text-terminal-green'"
-                              x-text="check.enabled ? 'pause' : 'resume'"></button>
-                            <button @click.stop="openEditModal(check)"
-                              class="text-[10px] bg-terminal-border hover:bg-terminal-muted text-terminal-text px-3 py-1.5 rounded uppercase tracking-wide">edit</button>
-                            <button @click.stop="openHistoryModal(check)"
-                              class="text-[10px] bg-terminal-border hover:bg-terminal-muted text-terminal-text px-3 py-1.5 rounded uppercase tracking-wide">changes
-                              log</button>
-                            <button @click.stop="deleteCheck(check.id)"
-                              class="text-[10px] bg-terminal-red/20 hover:bg-terminal-red/30 text-terminal-red px-3 py-1.5 rounded uppercase tracking-wide">delete</button>
+
+                          <div x-show="!twoPane && expandedChecks.includes(check.id)" x-collapse
+                            class="border-t border-terminal-border bg-terminal-bg/50">
+                            <div class="p-5">
+                              <div class="h-24 w-full mb-4 relative" :data-check-id="check.id"
+                                x-effect="if(expandedChecks.includes(check.id) && check.history) { renderChart($el, check.history, check.is_up); }"
+                                x-init="$watch('timeRange', () => { if(expandedChecks.includes(check.id)) { setTimeout(() => { const updatedCheck = groupedChecks.flatMap(g => g.checks || []).find(c => c.id === check.id); if(updatedCheck && updatedCheck.history) renderChart($el, updatedCheck.history, updatedCheck.is_up); }, 200); } });">
+                                <canvas class="w-full h-full"></canvas>
+                              </div>
+                              <div class="flex justify-between items-center text-xs mb-3">
+                                <span class="text-terminal-muted">response time history</span>
+                                <span class="text-terminal-muted">interval: <span class="text-terminal-text"
+                                    x-text="check.interval_seconds + 's'"></span></span>
+                              </div>
+                              <div
+                                class="flex gap-[2px] h-5 w-full rounded bg-terminal-border/50 mb-4 overflow-visible relative">
+                                <template x-for="(status, index) in getStatusBar(check.history, check)" :key="index">
+                                  <div
+                                    class="flex-1 h-full transition-all hover:opacity-70 cursor-pointer relative group/bar"
+                                    :class="status.success ? 'bg-terminal-green' : (status.empty ? 'bg-terminal-border' : 'bg-terminal-red')">
+                                    <div
+                                      class="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-terminal-bg border border-terminal-border text-[10px] px-2 py-1 rounded opacity-0 group-hover/bar:opacity-100 pointer-events-none whitespace-nowrap z-10">
+                                      <span x-text="status.empty ? 'N/A' : (status.success ? 'UP' : 'DOWN')"></span>
+                                      <span class="text-terminal-muted mx-1">|</span>
+                                      <span class="text-terminal-muted" x-text="status.time || ''"></span>
+                                    </div>
+                                  </div>
+                                </template>
+                              </div>
+                              <div class="flex gap-2">
+                                <button @click.stop="triggerCheckNow(check.id)"
+                                  class="text-[10px] bg-terminal-green/20 hover:bg-terminal-green/30 text-terminal-green px-3 py-1.5 rounded uppercase tracking-wide"
+                                  :disabled="!check.enabled">check now</button>
+                                <button @click.stop="toggleCheckEnabled(check)"
+                                  class="text-[10px] px-3 py-1.5 rounded uppercase tracking-wide"
+                                  :class="check.enabled ? 'bg-terminal-yellow/20 hover:bg-terminal-yellow/30 text-terminal-yellow' : 'bg-terminal-green/20 hover:bg-terminal-green/30 text-terminal-green'"
+                                  x-text="check.enabled ? 'pause' : 'resume'"></button>
+                                <button @click.stop="openEditModal(check)"
+                                  class="text-[10px] bg-terminal-border hover:bg-terminal-muted text-terminal-text px-3 py-1.5 rounded uppercase tracking-wide">edit</button>
+                                <button @click.stop="openHistoryModal(check)"
+                                  class="text-[10px] bg-terminal-border hover:bg-terminal-muted text-terminal-text px-3 py-1.5 rounded uppercase tracking-wide">changes
+                                  log</button>
+                                <button @click.stop="deleteCheck(check.id)"
+                                  class="text-[10px] bg-terminal-red/20 hover:bg-terminal-red/30 text-terminal-red px-3 py-1.5 rounded uppercase tracking-wide">delete</button>
+                              </div>
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      </template>
                     </div>
-                  </template>
+                  </div>
+                </div>
+              </template>
+            </div>
+
+            <div x-show="hasLoaded && groupedChecks.length === 0"
+              class="text-center py-20 border border-dashed border-terminal-border rounded-lg">
+              <div class="text-terminal-muted mb-2 text-4xl">_</div>
+              <div class="text-terminal-muted mb-4 text-sm">no monitors configured</div>
+              <button @click="openAddModal()" class="text-terminal-green hover:underline text-sm">+ create first
+                monitor</button>
+            </div>
+
+          </section>
+
+          <!-- Details Pane (Desktop) -->
+          <aside class="hidden lg:block lg:col-span-5">
+            <div
+              class="bg-terminal-surface border border-terminal-border rounded-lg lg:sticky lg:top-24 max-h-[calc(100vh-8rem)] overflow-y-auto">
+              <div class="p-6 border-b border-terminal-border">
+                <div class="text-xs text-terminal-muted uppercase tracking-widest">Details</div>
+              </div>
+
+              <div x-show="!selectedCheck" class="p-6 text-terminal-muted">
+                <div class="text-sm">Select a monitor to view graph, history, stats, and logs.</div>
+              </div>
+
+              <div x-show="selectedCheck" x-cloak>
+                <div class="p-6 border-b border-terminal-border">
+                  <div class="flex items-start justify-between gap-4">
+                    <div class="min-w-0">
+                      <div class="flex items-center gap-3">
+                        <div class="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                          :class="!selectedCheck.enabled ? 'bg-terminal-yellow' : (selectedCheck.is_up ? 'bg-terminal-green glow-green' : 'bg-terminal-red glow-red')">
+                        </div>
+                        <div class="font-bold text-terminal-text truncate" x-text="selectedCheck?.name"></div>
+                      </div>
+                      <div class="mt-2 flex items-center gap-2 flex-wrap">
+                        <span x-show="!selectedCheck?.enabled"
+                          class="text-[10px] px-2 py-0.5 rounded uppercase font-bold bg-terminal-yellow/20 text-terminal-yellow">paused</span>
+                        <span class="text-[10px] px-2 py-0.5 rounded uppercase font-bold"
+                          :class="getCheckTypeClass(selectedCheck?.type)" x-text="selectedCheck?.type"></span>
+                        <span class="text-xs text-terminal-muted truncate"
+                          x-text="getCheckTarget(selectedCheck || {})"></span>
+                      </div>
+                      <div class="mt-2 text-xs text-terminal-muted">last checked: <span class="text-terminal-text"
+                          x-text="formatDate(selectedCheck?.last_checked_at)"></span></div>
+                    </div>
+                    <button type="button" @click="clearSelection()"
+                      class="text-terminal-muted hover:text-terminal-text text-2xl leading-none">&times;</button>
+                  </div>
+
+                  <div class="mt-4 flex gap-2 flex-wrap">
+                    <button @click="triggerCheckNow(selectedCheck.id)"
+                      class="text-[10px] bg-terminal-green/20 hover:bg-terminal-green/30 text-terminal-green px-3 py-1.5 rounded uppercase tracking-wide"
+                      :disabled="!selectedCheck.enabled">check now</button>
+                    <button @click="toggleCheckEnabled(selectedCheck)"
+                      class="text-[10px] px-3 py-1.5 rounded uppercase tracking-wide"
+                      :class="selectedCheck.enabled ? 'bg-terminal-yellow/20 hover:bg-terminal-yellow/30 text-terminal-yellow' : 'bg-terminal-green/20 hover:bg-terminal-green/30 text-terminal-green'"
+                      x-text="selectedCheck.enabled ? 'pause' : 'resume'"></button>
+                    <button @click="openEditModal(selectedCheck)"
+                      class="text-[10px] bg-terminal-border hover:bg-terminal-muted text-terminal-text px-3 py-1.5 rounded uppercase tracking-wide">edit</button>
+                    <button @click="openHistoryModal(selectedCheck)"
+                      class="text-[10px] bg-terminal-border hover:bg-terminal-muted text-terminal-text px-3 py-1.5 rounded uppercase tracking-wide">changes
+                      log</button>
+                    <button @click="deleteCheck(selectedCheck.id)"
+                      class="text-[10px] bg-terminal-red/20 hover:bg-terminal-red/30 text-terminal-red px-3 py-1.5 rounded uppercase tracking-wide">delete</button>
+                  </div>
+                </div>
+
+                <div class="p-6 border-b border-terminal-border">
+                  <div class="flex justify-between items-center text-xs mb-3">
+                    <span class="text-terminal-muted">response time graph</span>
+                    <span class="text-terminal-muted">range: <span class="text-terminal-text"
+                        x-text="timeRange"></span></span>
+                  </div>
+                  <div class="h-40 w-full relative" x-ref="detailsChart">
+                    <canvas class="w-full h-full"></canvas>
+                  </div>
+                </div>
+
+                <div class="p-6 border-b border-terminal-border">
+                  <div class="text-xs text-terminal-muted uppercase tracking-widest mb-3">Stats</div>
+                  <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-terminal-bg border border-terminal-border rounded p-3">
+                      <div class="text-[10px] text-terminal-muted uppercase tracking-widest">uptime</div>
+                      <div class="text-lg font-bold" x-text="selectedUptimePercent()"></div>
+                    </div>
+                    <div class="bg-terminal-bg border border-terminal-border rounded p-3">
+                      <div class="text-[10px] text-terminal-muted uppercase tracking-widest">avg latency</div>
+                      <div class="text-lg font-bold" x-text="selectedAvgLatency()"></div>
+                    </div>
+                    <div class="bg-terminal-bg border border-terminal-border rounded p-3">
+                      <div class="text-[10px] text-terminal-muted uppercase tracking-widest">checks</div>
+                      <div class="text-lg font-bold" x-text="(history || []).length"></div>
+                    </div>
+                    <div class="bg-terminal-bg border border-terminal-border rounded p-3">
+                      <div class="text-[10px] text-terminal-muted uppercase tracking-widest">down</div>
+                      <div class="text-lg font-bold" x-text="selectedDownCount()"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="p-6 border-b border-terminal-border">
+                  <div class="flex justify-between items-center mb-3">
+                    <div class="text-xs text-terminal-muted uppercase tracking-widest">History (Status Changes)</div>
+                    <div class="text-[10px] text-terminal-muted" x-text="(filteredHistory || []).length + ' events'">
+                    </div>
+                  </div>
+                  <div x-show="(filteredHistory || []).length === 0" class="text-terminal-muted text-sm">No status
+                    changes recorded yet</div>
+                  <div x-show="(filteredHistory || []).length > 0" class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                      <thead
+                        class="bg-terminal-bg sticky top-0 text-[10px] uppercase text-terminal-muted tracking-widest">
+                        <tr>
+                          <th class="p-2">time</th>
+                          <th class="p-2">status</th>
+                          <th class="p-2">latency</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-terminal-border text-terminal-text">
+                        <template x-for="(item, idx) in (filteredHistory || []).slice(0, 50)" :key="idx">
+                          <tr>
+                            <td class="p-2 text-terminal-muted" x-text="formatDate(item.checked_at)"></td>
+                            <td class="p-2" :class="item.success ? 'text-terminal-green' : 'text-terminal-red'"
+                              x-text="item.success ? 'UP' : 'DOWN'"></td>
+                            <td class="p-2 text-terminal-muted" x-text="(item.response_time_ms || 0) + 'ms'"></td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div class="p-6">
+                  <div class="flex justify-between items-center mb-3">
+                    <div class="text-xs text-terminal-muted uppercase tracking-widest">Logs</div>
+                    <div class="text-[10px] text-terminal-muted" x-text="(history || []).length ? 'latest first' : ''">
+                    </div>
+                  </div>
+                  <div x-show="(history || []).length === 0" class="text-terminal-muted text-sm">No logs yet</div>
+                  <div x-show="(history || []).length > 0" class="space-y-2">
+                    <template x-for="(entry, idx) in (history || []).slice(0, 50)" :key="idx">
+                      <div class="bg-terminal-bg border border-terminal-border rounded p-3">
+                        <div class="flex justify-between items-center gap-3">
+                          <div class="text-xs text-terminal-muted" x-text="formatDate(entry.checked_at)"></div>
+                          <div class="text-[10px] px-2 py-0.5 rounded uppercase font-bold"
+                            :class="entry.success ? 'bg-terminal-green/20 text-terminal-green' : 'bg-terminal-red/20 text-terminal-red'"
+                            x-text="entry.success ? 'UP' : 'DOWN'"></div>
+                        </div>
+                        <div class="mt-2 text-xs text-terminal-muted">
+                          latency: <span class="text-terminal-text"
+                            x-text="(entry.response_time_ms || 0) + 'ms'"></span>
+                          <span class="text-terminal-muted mx-2">|</span>
+                          status: <span class="text-terminal-text" x-text="(entry.status_code || 0)"></span>
+                        </div>
+                        <div class="mt-1 text-xs text-terminal-text whitespace-pre-wrap break-words"
+                          x-text="getLogMessage(entry)"></div>
+                      </div>
+                    </template>
+                  </div>
                 </div>
               </div>
             </div>
-          </template>
-        </div>
-
-        <div x-show="hasLoaded && groupedChecks.length === 0"
-          class="text-center py-20 border border-dashed border-terminal-border rounded-lg">
-          <div class="text-terminal-muted mb-2 text-4xl">_</div>
-          <div class="text-terminal-muted mb-4 text-sm">no monitors configured</div>
-          <button @click="openAddModal()" class="text-terminal-green hover:underline text-sm">+ create first
-            monitor</button>
+          </aside>
         </div>
       </main>
 
@@ -1107,10 +1352,10 @@
                   </button>
                 </div>
 
-                <div class="space-y-2 mb-4">
+                <div class="mb-4 bg-terminal-bg border border-terminal-border rounded-lg overflow-hidden">
                   <template x-for="passkey in passkeys" :key="passkey.id">
                     <div
-                      class="flex items-center justify-between p-3 bg-terminal-bg rounded border border-terminal-border hover:border-terminal-muted transition">
+                      class="flex items-center justify-between p-3 border-b border-terminal-border last:border-b-0 hover:bg-terminal-border/20 transition">
                       <div class="flex-1 flex items-center gap-3">
                         <svg class="w-5 h-5 text-terminal-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -1130,7 +1375,7 @@
                       </button>
                     </div>
                   </template>
-                  <div x-show="!passkeys || passkeys.length === 0" class="text-center py-6 text-terminal-muted text-sm">
+                  <div x-show="!passkeys || passkeys.length === 0" class="text-center p-6 text-terminal-muted text-sm">
                     No passkeys registered. Add one for faster, passwordless login.
                   </div>
                 </div>
@@ -1191,10 +1436,10 @@
                 </div>
 
                 <!-- API Keys List -->
-                <div class="space-y-2">
+                <div class="bg-terminal-bg border border-terminal-border rounded-lg overflow-hidden">
                   <template x-for="key in apiKeys" :key="key.id">
                     <div
-                      class="flex items-center justify-between p-3 bg-terminal-bg rounded border border-terminal-border hover:border-terminal-muted transition">
+                      class="flex items-center justify-between p-3 border-b border-terminal-border last:border-b-0 hover:bg-terminal-border/20 transition">
                       <div class="flex-1">
                         <div class="text-sm font-mono text-terminal-text" x-text="key.name"></div>
                         <div class="text-[10px] text-terminal-muted flex gap-3 mt-1">
@@ -1209,7 +1454,7 @@
                       </button>
                     </div>
                   </template>
-                  <div x-show="!apiKeys || apiKeys.length === 0" class="text-center py-6 text-terminal-muted text-sm">
+                  <div x-show="!apiKeys || apiKeys.length === 0" class="text-center p-6 text-terminal-muted text-sm">
                     No API keys yet. Create one to enable programmatic access.
                   </div>
                 </div>
@@ -1328,6 +1573,8 @@
         timeRange: localStorage.getItem('gocheck_timeRange') || '1d',
         skeletonGroupCount: parseInt(localStorage.getItem('gocheck_groupCount') || '3'),
         skeletonCheckCount: parseInt(localStorage.getItem('gocheck_checkCount') || '2'),
+        isDarkMode: localStorage.getItem('gocheck_theme') !== 'light',
+        twoPane: false,
         ranges: ['15m', '30m', '60m', '1d', '30d'],
         settings: { discord_webhook_url: '', gotify_server_url: '', gotify_token: '', tailscale_api_key: '', tailscale_tailnet: '' },
         testingWebhook: false,
@@ -1359,10 +1606,47 @@
         },
         eventSource: null,
 
+        toast: { visible: false, message: '', type: 'info', timeoutId: null },
+
+        showToast(message, type = 'info', durationMs = 2500) {
+          this.toast.message = message;
+          this.toast.type = type;
+          this.toast.visible = true;
+          if (this.toast.timeoutId) {
+            clearTimeout(this.toast.timeoutId);
+          }
+          this.toast.timeoutId = setTimeout(() => {
+            this.toast.visible = false;
+            this.toast.timeoutId = null;
+          }, durationMs);
+        },
+
+        hideToast() {
+          this.toast.visible = false;
+          if (this.toast.timeoutId) {
+            clearTimeout(this.toast.timeoutId);
+            this.toast.timeoutId = null;
+          }
+        },
+
+        toggleTheme() {
+          this.isDarkMode = !this.isDarkMode;
+          const htmlRoot = document.documentElement;
+          if (this.isDarkMode) {
+            htmlRoot.classList.add('dark');
+            localStorage.setItem('gocheck_theme', 'dark');
+          } else {
+            htmlRoot.classList.remove('dark');
+            localStorage.setItem('gocheck_theme', 'light');
+          }
+        },
+
         async init() {
           await this.checkAuth();
           if (this.isAuthenticated) {
             await Promise.all([this.loadData(), this.loadSettings(), this.loadGroups(), this.loadTags()]);
+
+            this.setupResponsive();
 
             // If no expanded groups saved, expand all by default
             if (this.expandedGroups.length === 0) {
@@ -1380,7 +1664,123 @@
                 this.loadPasskeys();
               }
             });
+
+            this.$watch('timeRange', async () => {
+              if (this.twoPane && this.selectedCheck) {
+                await this.loadSelectedHistory();
+              }
+            });
           }
+        },
+
+        setupResponsive() {
+          const mq = window.matchMedia('(min-width: 1024px)');
+          const apply = () => {
+            this.twoPane = mq.matches;
+            if (this.twoPane) {
+              // Disable dropdown expansions on desktop
+              this.expandedChecks = [];
+              this.saveExpandState();
+            }
+            this.$nextTick(() => this.renderSelectedChart());
+          };
+          apply();
+          if (mq.addEventListener) {
+            mq.addEventListener('change', apply);
+          } else {
+            mq.addListener(apply);
+          }
+        },
+
+        getCheckId(check) {
+          return check?.id ?? check?.check?.id ?? null;
+        },
+
+        handleCheckRowClick(check) {
+          if (this.twoPane) {
+            this.selectCheck(check);
+            return;
+          }
+          this.toggleExpand(this.getCheckId(check));
+        },
+
+        async selectCheck(check) {
+          this.selectedCheck = check;
+          await this.loadSelectedHistory();
+        },
+
+        clearSelection() {
+          this.selectedCheck = null;
+          this.history = [];
+          this.filteredHistory = [];
+          this.$nextTick(() => {
+            const container = this.$refs?.detailsChart;
+            if (!container) return;
+            const canvas = container.querySelector('canvas');
+            if (canvas?.chartInstance) {
+              canvas.chartInstance.destroy();
+              canvas.chartInstance = null;
+            }
+          });
+        },
+
+        computeStatusTransitions(history) {
+          const transitions = [];
+          const data = history || [];
+          for (let i = 0; i < data.length; i++) {
+            const current = data[i];
+            const prev = data[i + 1];
+            if (!prev || current.success !== prev.success) {
+              transitions.push({ ...current, prevSuccess: prev ? prev.success : !current.success });
+            }
+          }
+          return transitions;
+        },
+
+        async loadSelectedHistory() {
+          if (!this.selectedCheck) return;
+          const id = this.getCheckId(this.selectedCheck);
+          if (!id) return;
+          try {
+            const response = await fetch(`/api/checks/${id}/history?limit=500&range=${encodeURIComponent(this.timeRange)}`);
+            this.history = await response.json() || [];
+            this.filteredHistory = this.computeStatusTransitions(this.history);
+            this.$nextTick(() => this.renderSelectedChart());
+          } catch (error) {
+            console.error('Failed to load selected history:', error);
+          }
+        },
+
+        renderSelectedChart() {
+          if (!this.twoPane) return;
+          if (!this.selectedCheck) return;
+          if (!this.$refs?.detailsChart) return;
+          this.renderChart(this.$refs.detailsChart, this.history, this.selectedCheck.is_up);
+        },
+
+        selectedUptimePercent() {
+          const data = this.history || [];
+          if (data.length === 0) return '—';
+          const up = data.filter(h => h && h.success).length;
+          return ((up / data.length) * 100).toFixed(2) + '%';
+        },
+
+        selectedAvgLatency() {
+          const data = (this.history || []).filter(h => typeof h?.response_time_ms === 'number');
+          if (data.length === 0) return '—';
+          const sum = data.reduce((acc, h) => acc + (h.response_time_ms || 0), 0);
+          return Math.round(sum / data.length) + 'ms';
+        },
+
+        selectedDownCount() {
+          const data = this.history || [];
+          if (data.length === 0) return '—';
+          return data.filter(h => h && h.success === false).length;
+        },
+
+        getLogMessage(entry) {
+          if (!entry) return '';
+          return entry.error_message || entry.response_body || '-';
         },
 
         async checkAuth() {
@@ -1703,7 +2103,7 @@
           for (let group of this.groupedChecks) {
             if (!group.checks || !Array.isArray(group.checks)) continue;
 
-            const checkIndex = group.checks.findIndex(c => c && c.check && c.check.id === update.check_id);
+            const checkIndex = group.checks.findIndex(c => this.getCheckId(c) === update.check_id);
             if (checkIndex !== -1) {
               // Update the check data
               group.checks[checkIndex].last_status = update.last_status;
@@ -1718,11 +2118,11 @@
               group.checks[checkIndex].history = group.checks[checkIndex].history.slice(0, 500);
 
               // Update chart if this check is being viewed
-              if (this.selectedCheck && this.selectedCheck.check && this.selectedCheck.check.id === update.check_id) {
+              if (this.selectedCheck && this.getCheckId(this.selectedCheck) === update.check_id) {
                 this.selectedCheck = group.checks[checkIndex];
                 this.history = this.selectedCheck.history || [];
-                this.filteredHistory = this.history;
-                this.renderChart();
+                this.filteredHistory = this.computeStatusTransitions(this.history);
+                this.$nextTick(() => this.renderSelectedChart());
               }
 
               // Recalculate group status
@@ -1742,7 +2142,7 @@
           group.up_count = 0;
           group.down_count = 0;
           for (let check of group.checks) {
-            if (check && check.check && check.check.enabled) {
+            if (check && check.enabled) {
               if (check.is_up) {
                 group.up_count++;
               } else {
@@ -1793,6 +2193,15 @@
             this.lastUpdated = new Date();
             this.isLive = true;
             this.hasLoaded = true;
+
+            if (this.selectedCheck) {
+              const selectedId = this.getCheckId(this.selectedCheck);
+              const allChecks = this.groupedChecks.flatMap(g => g.checks || []);
+              const found = allChecks.find(c => this.getCheckId(c) === selectedId);
+              if (found) {
+                this.selectedCheck = found;
+              }
+            }
           } catch (error) {
             console.error('Failed to load data:', error);
             this.isLive = false;
@@ -2136,7 +2545,10 @@
               method: 'POST'
             });
             if (!response.ok) throw new Error('Failed to trigger check');
-          } catch (error) { alert('Failed to trigger check: ' + error.message); }
+            this.showToast('Check triggered. Waiting for next result…', 'success');
+          } catch (error) {
+            this.showToast('Failed to trigger check: ' + (error?.message || 'Unknown error'), 'error');
+          }
         },
 
         async toggleCheckEnabled(check) {
@@ -2229,14 +2641,7 @@
           try {
             const response = await fetch(`/api/checks/${check.id}/history?limit=500&range=${encodeURIComponent(this.timeRange)}`);
             this.history = await response.json() || [];
-            this.filteredHistory = [];
-            for (let i = 0; i < this.history.length; i++) {
-              const current = this.history[i];
-              const prev = this.history[i + 1];
-              if (!prev || current.success !== prev.success) {
-                this.filteredHistory.push({ ...current, prevSuccess: prev ? prev.success : !current.success });
-              }
-            }
+            this.filteredHistory = this.computeStatusTransitions(this.history);
             this.showHistoryModal = true;
           } catch (error) { alert('Failed to load history: ' + error.message); }
         },
@@ -2245,9 +2650,6 @@
           this.showAddModal = false;
           this.showHistoryModal = false;
           this.editingCheck = null;
-          this.selectedCheck = null;
-          this.history = [];
-          this.filteredHistory = [];
         },
 
         formatDate(dateStr) {
