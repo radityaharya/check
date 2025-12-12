@@ -287,7 +287,9 @@ export function DetailsPane({
             isPage ? "p-4 md:p-6" : "p-6"
           )}>
             <div className="flex justify-between items-center text-xs mb-3">
-              <span className="text-terminal-muted">response time graph</span>
+              <span className="text-terminal-muted uppercase tracking-widest">
+                response time {regions.length > 1 ? 'by region' : 'graph'}
+              </span>
               <span className="text-terminal-muted">
                 range: <span className="text-terminal-text">{timeRange}</span>
               </span>
@@ -298,6 +300,35 @@ export function DetailsPane({
                   <div className="w-5 h-5 border-2 border-terminal-green border-t-transparent rounded-full animate-spin" />
                   <span className="text-xs text-terminal-muted">Loading chart...</span>
                 </div>
+              </div>
+            ) : regions.length > 1 ? (
+              <div className="space-y-4">
+                {regions.map((regionStats: RegionStats) => {
+                  const regionHistory = history.filter(h => h.region === regionStats.region);
+                  return (
+                    <div key={regionStats.region}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div
+                          className={cn(
+                            'w-2 h-2 rounded-full',
+                            regionStats.is_up ? 'bg-terminal-green' : 'bg-terminal-red'
+                          )}
+                        />
+                        <span className="text-xs font-semibold text-terminal-text uppercase tracking-wider">
+                          {regionStats.region}
+                        </span>
+                        <span className="text-[10px] text-terminal-muted">
+                          {regionHistory.length} checks
+                        </span>
+                      </div>
+                      <ResponseTimeChart 
+                        history={regionHistory} 
+                        isUp={regionStats.is_up ?? check.is_up} 
+                        height="h-32" 
+                      />
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <ResponseTimeChart history={history} isUp={check.is_up} height="h-40" />

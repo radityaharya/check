@@ -145,6 +145,11 @@ export function useSSE(options: UseSSEOptions = {}) {
             }
           );
 
+          // Invalidate check stats to refresh region-specific stats
+          queryClient.invalidateQueries({
+            queryKey: ['check-stats', update.check_id, currentRange],
+          });
+
           // Update stats cache directly
           queryClient.setQueryData<Stats>(['stats', currentRange], (oldStats) => {
             if (!oldStats) return oldStats;
