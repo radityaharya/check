@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"gocheck/internal/api"
 	"gocheck/internal/auth"
@@ -79,14 +80,18 @@ func main() {
 		log.Fatalf("Failed to create data directory: %v", err)
 	}
 
-	// Initialize database (PostgreSQL or SQLite based on config)
+	// Initialize database (PostgreSQL, TimescaleDB, or SQLite based on config)
 	var database *db.Database
 	if config.Database.URL != "" {
 		database, err = db.NewDatabaseWithURL(config.Database.URL, config.Database.Path)
 		if err != nil {
 			log.Fatalf("Failed to initialize database: %v", err)
 		}
-		log.Printf("Using PostgreSQL database")
+		if os.Getenv("USE_TIMESCALE") == "true" || strings.Contains(config.Database.URL, "timescale") {
+			log.Printf("Using TimescaleDB database")
+		} else {
+			log.Printf("Using PostgreSQL database")
+		}
 	} else {
 		database, err = db.NewDatabase(config.Database.Path)
 		if err != nil {

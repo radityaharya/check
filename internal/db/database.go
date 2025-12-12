@@ -13,7 +13,7 @@ type Database struct {
 }
 
 // NewDatabase creates a new database instance based on the provided configuration
-// If databaseURL is provided (postgres://...), it uses PostgreSQL
+// If databaseURL is provided (postgres://...), it uses PostgreSQL or TimescaleDB
 // Otherwise, it falls back to SQLite with dbPath
 func NewDatabase(dbPath string) (*Database, error) {
 	// Check for DATABASE_URL environment variable first
@@ -23,10 +23,18 @@ func NewDatabase(dbPath string) (*Database, error) {
 	var err error
 	
 	if databaseURL != "" && strings.HasPrefix(databaseURL, "postgres") {
-		// Use PostgreSQL
-		impl, err = NewPostgresDB(databaseURL)
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize postgres: %w", err)
+		// Check if TimescaleDB is requested
+		if os.Getenv("USE_TIMESCALE") == "true" || strings.Contains(databaseURL, "timescale") {
+			impl, err = NewTimescaleDB(databaseURL)
+			if err != nil {
+				return nil, fmt.Errorf("failed to initialize timescale: %w", err)
+			}
+		} else {
+			// Use PostgreSQL
+			impl, err = NewPostgresDB(databaseURL)
+			if err != nil {
+				return nil, fmt.Errorf("failed to initialize postgres: %w", err)
+			}
 		}
 	} else {
 		// Use SQLite
@@ -46,10 +54,18 @@ func NewDatabaseWithURL(databaseURL string, sqlitePath string) (*Database, error
 	var err error
 	
 	if databaseURL != "" && strings.HasPrefix(databaseURL, "postgres") {
-		// Use PostgreSQL
-		impl, err = NewPostgresDB(databaseURL)
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize postgres: %w", err)
+		// Check if TimescaleDB is requested
+		if os.Getenv("USE_TIMESCALE") == "true" || strings.Contains(databaseURL, "timescale") {
+			impl, err = NewTimescaleDB(databaseURL)
+			if err != nil {
+				return nil, fmt.Errorf("failed to initialize timescale: %w", err)
+			}
+		} else {
+			// Use PostgreSQL
+			impl, err = NewPostgresDB(databaseURL)
+			if err != nil {
+				return nil, fmt.Errorf("failed to initialize postgres: %w", err)
+			}
 		}
 	} else {
 		// Use SQLite
