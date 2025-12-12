@@ -27,17 +27,17 @@ export function useSSE(options: UseSSEOptions = {}) {
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttempts = useRef(0);
   const isConnecting = useRef(false);
-  
+
   // Store values in refs to avoid dependency issues
   const onConnectRef = useRef(onConnect);
   const onDisconnectRef = useRef(onDisconnect);
   const timeRangeRef = useRef(timeRange);
-  
+
   useEffect(() => {
     onConnectRef.current = onConnect;
     onDisconnectRef.current = onDisconnect;
   }, [onConnect, onDisconnect]);
-  
+
   useEffect(() => {
     timeRangeRef.current = timeRange;
   }, [timeRange]);
@@ -86,18 +86,19 @@ export function useSSE(options: UseSSEOptions = {}) {
           const update: SSECheckUpdate = JSON.parse(event.data);
           console.log('[SSE] Received check_update:', update);
 
-          // Update the grouped checks cache directly (using current timeRange)
           const currentRange = timeRangeRef.current;
+
+          // Update the grouped checks cache directly (using current timeRange)
           queryClient.setQueryData<CheckGroup[]>(['checks', 'grouped', currentRange], (oldData) => {
             if (!oldData) return oldData;
-            
+
             return oldData.map((group) => {
               const checkIndex = group.checks.findIndex((c) => c.id === update.check_id);
               if (checkIndex === -1) return group;
-              
+
               const updatedChecks = [...group.checks];
               const existingCheck = updatedChecks[checkIndex];
-              
+
               // Merge the updated check data with existing data
               updatedChecks[checkIndex] = {
                 ...existingCheck,
@@ -106,15 +107,15 @@ export function useSSE(options: UseSSEOptions = {}) {
                 last_checked_at: update.last_checked_at,
                 last_status: update.last_status,
                 // Prepend new status to history (keep last 100)
-                history: existingCheck.history 
+                history: existingCheck.history
                   ? [update.last_status, ...existingCheck.history].slice(0, 100)
                   : [update.last_status],
               };
-              
+
               // Recalculate group stats
               const upCount = updatedChecks.filter((c) => c.enabled && c.is_up).length;
               const downCount = updatedChecks.filter((c) => c.enabled && !c.is_up).length;
-              
+
               return {
                 ...group,
                 checks: updatedChecks,
@@ -125,10 +126,29 @@ export function useSSE(options: UseSSEOptions = {}) {
             });
           });
 
+          // Update the history cache for the affected check (current timeRange)
+          queryClient.setQueryData<CheckStatus[]>(
+            ['checks', update.check_id, 'history', currentRange],
+            (oldHistory) => {
+              if (!oldHistory) return oldHistory;
+
+              const alreadyExists = oldHistory.some((item) => {
+                if (item.id && update.last_status.id) {
+                  return item.id === update.last_status.id;
+                }
+                return item.checked_at === update.last_status.checked_at;
+              });
+
+              if (alreadyExists) return oldHistory;
+
+              return [update.last_status, ...oldHistory].slice(0, 500);
+            }
+          );
+
           // Update stats cache directly
           queryClient.setQueryData<Stats>(['stats', currentRange], (oldStats) => {
             if (!oldStats) return oldStats;
-            
+
             // We'd need to know the previous state to accurately update
             // For simplicity, just update the timestamp-related stats
             return {
@@ -136,15 +156,6 @@ export function useSSE(options: UseSSEOptions = {}) {
               // Stats will be recalculated on next full fetch
             };
           });
-          
-          // Only invalidate history for specific check (user might be viewing it)
-          if (update.check_id) {
-            queryClient.invalidateQueries({ 
-              queryKey: ['checks', update.check_id, 'history'],
-              // Don't refetch automatically, let the component decide
-              refetchType: 'none',
-            });
-          }
         } catch (error) {
           console.error('[SSE] Failed to parse check_update:', error);
         }

@@ -19,3 +19,5 @@ import.json
 # Data directory
 /data/
 node_modules
+
+.tmp
