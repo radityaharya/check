@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	"gocheck/internal/models"
@@ -15,8 +17,42 @@ type PostgresDB struct {
 	db *sql.DB
 }
 
+// normalizePostgresConnString normalizes the connection string and disables SSL by default
+// if sslmode is not explicitly specified. This prevents SSL errors when connecting to
+// PostgreSQL instances that don't have SSL enabled.
+func normalizePostgresConnString(connString string) string {
+	if strings.Contains(connString, "sslmode=") {
+		return connString
+	}
+
+	if strings.HasPrefix(connString, "postgres://") || strings.HasPrefix(connString, "postgresql://") {
+		parsed, err := url.Parse(connString)
+		if err != nil {
+			return connString + "?sslmode=disable"
+		}
+
+		query := parsed.Query()
+		if query.Get("sslmode") == "" {
+			query.Set("sslmode", "disable")
+			parsed.RawQuery = query.Encode()
+			return parsed.String()
+		}
+		return connString
+	}
+
+	if !strings.Contains(connString, "sslmode=") {
+		if strings.Contains(connString, "?") {
+			return connString + "&sslmode=disable"
+		}
+		return connString + "?sslmode=disable"
+	}
+
+	return connString
+}
+
 func NewPostgresDB(connString string) (*PostgresDB, error) {
-	db, err := sql.Open("postgres", connString)
+	normalizedConnString := normalizePostgresConnString(connString)
+	db, err := sql.Open("postgres", normalizedConnString)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open postgres connection: %w", err)
 	}
