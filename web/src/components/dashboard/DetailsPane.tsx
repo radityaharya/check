@@ -1,4 +1,5 @@
 import { X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { StatusDot, StatusBar } from '@/components/ui/status-bar';
 import { ResponseTimeChart } from './ResponseTimeChart';
@@ -35,6 +36,7 @@ export function DetailsPane({
   const toggleEnabledMutation = useToggleCheckEnabled();
   const deleteMutation = useDeleteCheck();
   const snapshotMutation = useTriggerSnapshot();
+  const [isSnapshotLoading, setIsSnapshotLoading] = useState(false);
   const snapshotSrc =
     check?.snapshot_url && check?.snapshot_url.length > 0
       ? `${check.snapshot_url}${check.snapshot_taken_at ? `?t=${encodeURIComponent(check.snapshot_taken_at)}` : ''}`
@@ -96,6 +98,19 @@ export function DetailsPane({
   const uptimePercent = calculateUptime(history);
   const avgLatency = calculateAvgLatency(history);
   const downCount = history.filter((h) => !h.success).length;
+  const percentileLatency = calculatePercentiles(history);
+
+  useEffect(() => {
+    if (!check) {
+      setIsSnapshotLoading(false);
+      return;
+    }
+    if (snapshotSrc) {
+      setIsSnapshotLoading(true);
+    } else {
+      setIsSnapshotLoading(false);
+    }
+  }, [check?.id, snapshotSrc]);
 
   return (
     <div className="bg-terminal-surface border border-terminal-border rounded-lg lg:sticky lg:top-24 max-h-[calc(100vh-8rem)] overflow-y-auto overflow-x-hidden">
@@ -220,11 +235,18 @@ export function DetailsPane({
                 </span>
               </div>
               {snapshotSrc ? (
-                <div className="border border-terminal-border rounded overflow-hidden bg-terminal-bg">
+                <div className="border border-terminal-border rounded overflow-hidden bg-terminal-bg relative">
+                  {isSnapshotLoading && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-terminal-bg/60 backdrop-blur-sm">
+                      <div className="w-6 h-6 border-2 border-terminal-green border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  )}
                   <img
                     src={snapshotSrc}
                     alt="Latest monitor snapshot"
                     className="w-full aspect-video object-cover"
+                    onLoad={() => setIsSnapshotLoading(false)}
+                    onError={() => setIsSnapshotLoading(false)}
                   />
                 </div>
               ) : (
@@ -281,6 +303,8 @@ export function DetailsPane({
                 <StatBox label="avg latency" value={avgLatency} />
                 <StatBox label="checks" value={String(history.length)} />
                 <StatBox label="down" value={String(downCount)} />
+                <StatBox label="p90 latency" value={percentileLatency.p90} />
+                <StatBox label="p99 latency" value={percentileLatency.p99} />
               </div>
             )}
           </div>
@@ -470,4 +494,22 @@ function calculateAvgLatency(history: CheckStatus[]): string {
   if (data.length === 0) return '—';
   const sum = data.reduce((acc, h) => acc + (h.response_time_ms || 0), 0);
   return Math.round(sum / data.length) + 'ms';
+}
+
+function calculatePercentiles(history: CheckStatus[]): { p90: string; p99: string } {
+  const values = history
+    .map((h) => h.response_time_ms || 0)
+    .filter((v) => v > 0)
+    .sort((a, b) => a - b);
+  if (values.length === 0) {
+    return { p90: '—', p99: '—' };
+  }
+  const pick = (p: number) => {
+    const idx = Math.min(values.length - 1, Math.floor((p / 100) * values.length));
+    return `${values[idx]}ms`;
+  };
+  return {
+    p90: pick(90),
+    p99: pick(99),
+  };
 }
