@@ -23,6 +23,7 @@ interface DetailsPaneProps {
   onClose: () => void;
   onEditCheck: (check: Check) => void;
   onOpenHistory: (check: Check) => void;
+  isPage?: boolean;
 }
 
 export function DetailsPane({
@@ -31,6 +32,7 @@ export function DetailsPane({
   onClose,
   onEditCheck,
   onOpenHistory,
+  isPage = false,
 }: DetailsPaneProps) {
   const { showToast } = useToast();
   const { data: history = [], isLoading: isLoadingHistory } = useCheckHistory(check?.id ?? null, timeRange);
@@ -121,13 +123,11 @@ export function DetailsPane({
   }, [check?.id, snapshotSrc]);
 
   return (
-    <div className="bg-terminal-surface border border-terminal-border rounded-lg lg:sticky lg:top-24 max-h-[calc(100vh-8rem)] overflow-y-auto overflow-x-hidden">
-      {/* <div className="p-6 border-b border-terminal-border">
-        <div className="text-xs text-terminal-muted uppercase tracking-widest">
-          Details
-        </div>
-      </div> */}
-
+    <div className={cn(
+      isPage 
+        ? "bg-terminal-bg" 
+        : "bg-terminal-surface border border-terminal-border rounded-lg lg:sticky lg:top-24 max-h-[calc(100vh-8rem)] overflow-y-auto overflow-x-hidden"
+    )}>
       {!check ? (
         <div className="p-6 text-terminal-muted">
           <div className="text-sm">
@@ -137,7 +137,10 @@ export function DetailsPane({
       ) : (
         <>
           {/* Check Header */}
-          <div className="p-6 border-b border-terminal-border">
+          <div className={cn(
+            "border-b border-terminal-border",
+            isPage ? "p-4 md:p-6" : "p-6"
+          )}>
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="flex items-center gap-3">
@@ -175,13 +178,15 @@ export function DetailsPane({
                   </span>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={onClose}
-                className="text-terminal-muted hover:text-terminal-text text-2xl leading-none"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              {!isPage && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="text-terminal-muted hover:text-terminal-text text-2xl leading-none"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
             </div>
 
             <div className="mt-4 flex gap-2 flex-wrap">
@@ -233,7 +238,10 @@ export function DetailsPane({
 
           {/* Snapshot */}
           {isSnapshotCapable && (
-            <div className="p-6 border-b border-terminal-border">
+            <div className={cn(
+              "border-b border-terminal-border",
+              isPage ? "p-4 md:p-6" : "p-6"
+            )}>
               <div className="flex justify-between items-center text-xs mb-3">
                 <span className="text-terminal-muted uppercase tracking-widest">Snapshot</span>
                 <span className="text-terminal-muted">
@@ -274,7 +282,10 @@ export function DetailsPane({
           )}
 
           {/* Chart */}
-          <div className="p-6 border-b border-terminal-border">
+          <div className={cn(
+            "border-b border-terminal-border",
+            isPage ? "p-4 md:p-6" : "p-6"
+          )}>
             <div className="flex justify-between items-center text-xs mb-3">
               <span className="text-terminal-muted">response time graph</span>
               <span className="text-terminal-muted">
@@ -294,7 +305,10 @@ export function DetailsPane({
           </div>
 
           {/* Stats */}
-          <div className="p-6 border-b border-terminal-border">
+          <div className={cn(
+            "border-b border-terminal-border",
+            isPage ? "p-4 md:p-6" : "p-6"
+          )}>
             <div className="text-xs text-terminal-muted uppercase tracking-widest mb-3">
               Stats
             </div>
@@ -319,7 +333,10 @@ export function DetailsPane({
 
           {/* Region Breakdown */}
           {regions.length > 0 && (
-            <div className="p-6 border-b border-terminal-border">
+            <div className={cn(
+              "border-b border-terminal-border",
+              isPage ? "p-4 md:p-6" : "p-6"
+            )}>
               <div className="text-xs text-terminal-muted uppercase tracking-widest mb-3">
                 Regions ({regions.length})
               </div>
@@ -403,7 +420,10 @@ export function DetailsPane({
           )}
 
           {/* Status Bar */}
-          <div className="p-6 border-b border-terminal-border">
+          <div className={cn(
+            "border-b border-terminal-border",
+            isPage ? "p-4 md:p-6" : "p-6"
+          )}>
             <div className="text-xs text-terminal-muted uppercase tracking-widest mb-3">
               Status History
             </div>
@@ -415,7 +435,10 @@ export function DetailsPane({
           </div>
 
           {/* History (Status Changes) */}
-          <div className="p-6 border-b border-terminal-border">
+          <div className={cn(
+            "border-b border-terminal-border",
+            isPage ? "p-4 md:p-6" : "p-6"
+          )}>
             <div className="flex justify-between items-center mb-3">
               <div className="text-xs text-terminal-muted uppercase tracking-widest">
                 History (Status Changes)
@@ -484,7 +507,9 @@ export function DetailsPane({
           </div>
 
           {/* Logs */}
-          <div className="p-6">
+          <div className={cn(
+            isPage ? "p-4 md:p-6" : "p-6"
+          )}>
             <div className="flex justify-between items-center mb-3">
               <div className="text-xs text-terminal-muted uppercase tracking-widest">
                 Logs

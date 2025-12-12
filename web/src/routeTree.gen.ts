@@ -9,12 +9,21 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as MonitorNewRouteImport } from './routes/monitor/new'
 import { Route as DemoTanstackQueryRouteImport } from './routes/demo/tanstack-query'
+import { Route as MonitorIdIndexRouteImport } from './routes/monitor/$id/index'
+import { Route as MonitorIdEditRouteImport } from './routes/monitor/$id/edit'
 import { Route as DemoFormSimpleRouteImport } from './routes/demo/form.simple'
 import { Route as DemoFormAddressRouteImport } from './routes/demo/form.address'
 
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -25,9 +34,24 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MonitorNewRoute = MonitorNewRouteImport.update({
+  id: '/monitor/new',
+  path: '/monitor/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DemoTanstackQueryRoute = DemoTanstackQueryRouteImport.update({
   id: '/demo/tanstack-query',
   path: '/demo/tanstack-query',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MonitorIdIndexRoute = MonitorIdIndexRouteImport.update({
+  id: '/monitor/$id/',
+  path: '/monitor/$id/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MonitorIdEditRoute = MonitorIdEditRouteImport.update({
+  id: '/monitor/$id/edit',
+  path: '/monitor/$id/edit',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DemoFormSimpleRoute = DemoFormSimpleRouteImport.update({
@@ -44,59 +68,94 @@ const DemoFormAddressRoute = DemoFormAddressRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/settings': typeof SettingsRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
+  '/monitor/new': typeof MonitorNewRoute
   '/demo/form/address': typeof DemoFormAddressRoute
   '/demo/form/simple': typeof DemoFormSimpleRoute
+  '/monitor/$id/edit': typeof MonitorIdEditRoute
+  '/monitor/$id': typeof MonitorIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/settings': typeof SettingsRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
+  '/monitor/new': typeof MonitorNewRoute
   '/demo/form/address': typeof DemoFormAddressRoute
   '/demo/form/simple': typeof DemoFormSimpleRoute
+  '/monitor/$id/edit': typeof MonitorIdEditRoute
+  '/monitor/$id': typeof MonitorIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/settings': typeof SettingsRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
+  '/monitor/new': typeof MonitorNewRoute
   '/demo/form/address': typeof DemoFormAddressRoute
   '/demo/form/simple': typeof DemoFormSimpleRoute
+  '/monitor/$id/edit': typeof MonitorIdEditRoute
+  '/monitor/$id/': typeof MonitorIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/login'
+    | '/settings'
     | '/demo/tanstack-query'
+    | '/monitor/new'
     | '/demo/form/address'
     | '/demo/form/simple'
+    | '/monitor/$id/edit'
+    | '/monitor/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
+    | '/settings'
     | '/demo/tanstack-query'
+    | '/monitor/new'
     | '/demo/form/address'
     | '/demo/form/simple'
+    | '/monitor/$id/edit'
+    | '/monitor/$id'
   id:
     | '__root__'
     | '/'
     | '/login'
+    | '/settings'
     | '/demo/tanstack-query'
+    | '/monitor/new'
     | '/demo/form/address'
     | '/demo/form/simple'
+    | '/monitor/$id/edit'
+    | '/monitor/$id/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
+  SettingsRoute: typeof SettingsRoute
   DemoTanstackQueryRoute: typeof DemoTanstackQueryRoute
+  MonitorNewRoute: typeof MonitorNewRoute
   DemoFormAddressRoute: typeof DemoFormAddressRoute
   DemoFormSimpleRoute: typeof DemoFormSimpleRoute
+  MonitorIdEditRoute: typeof MonitorIdEditRoute
+  MonitorIdIndexRoute: typeof MonitorIdIndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -111,11 +170,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/monitor/new': {
+      id: '/monitor/new'
+      path: '/monitor/new'
+      fullPath: '/monitor/new'
+      preLoaderRoute: typeof MonitorNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/demo/tanstack-query': {
       id: '/demo/tanstack-query'
       path: '/demo/tanstack-query'
       fullPath: '/demo/tanstack-query'
       preLoaderRoute: typeof DemoTanstackQueryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/monitor/$id/': {
+      id: '/monitor/$id/'
+      path: '/monitor/$id'
+      fullPath: '/monitor/$id'
+      preLoaderRoute: typeof MonitorIdIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/monitor/$id/edit': {
+      id: '/monitor/$id/edit'
+      path: '/monitor/$id/edit'
+      fullPath: '/monitor/$id/edit'
+      preLoaderRoute: typeof MonitorIdEditRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/demo/form/simple': {
@@ -138,9 +218,13 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
+  SettingsRoute: SettingsRoute,
   DemoTanstackQueryRoute: DemoTanstackQueryRoute,
+  MonitorNewRoute: MonitorNewRoute,
   DemoFormAddressRoute: DemoFormAddressRoute,
   DemoFormSimpleRoute: DemoFormSimpleRoute,
+  MonitorIdEditRoute: MonitorIdEditRoute,
+  MonitorIdIndexRoute: MonitorIdIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

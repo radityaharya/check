@@ -516,6 +516,12 @@ function CheckItem({
             {/* Action Buttons */}
             <div className="flex gap-2 flex-wrap">
               <button
+                onClick={onSelect}
+                className="text-[10px] bg-terminal-cyan/20 hover:bg-terminal-cyan/30 text-terminal-cyan px-3 py-1.5 rounded uppercase tracking-wide font-bold"
+              >
+                view details
+              </button>
+              <button
                 onClick={onTrigger}
                 disabled={!check.enabled}
                 className="text-[10px] bg-terminal-green/20 hover:bg-terminal-green/30 text-terminal-green px-3 py-1.5 rounded uppercase tracking-wide disabled:opacity-50"

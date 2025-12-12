@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { cn } from '@/lib/utils';
 import {
@@ -6,8 +6,6 @@ import {
   useLogout,
   useGroupedChecks,
   useStats,
-  useCreateCheck,
-  useUpdateCheck,
   useDeleteCheck,
   useTriggerCheck,
   useToggleCheckEnabled,
@@ -30,10 +28,8 @@ import {
   useToggleGroup,
   useSSEConnected,
   useSetSSEConnected,
-  useMonitorModal,
   useGroupModal,
   useTagModal,
-  useSettingsModal,
   useHistoryModal,
 } from '@/hooks';
 import { LoadingScreen } from '@/components/ui/spinner';
@@ -41,14 +37,8 @@ import { useToast, ToastProvider } from '@/components/ui/toast';
 import { AppHeader, StatsGrid, TimeRangeSelector } from '@/components/dashboard/Header';
 import { MonitorsList } from '@/components/dashboard/MonitorsList';
 import { DetailsPane } from '@/components/dashboard/DetailsPane';
-import {
-  MonitorFormModal,
-  GroupModal,
-  TagModal,
-  SettingsModal,
-  HistoryModal,
-} from '@/components/modals';
-import type { Check, CheckFormData } from '@/types';
+import { GroupModal, TagModal, HistoryModal } from '@/components/modals';
+import type { Check } from '@/types';
 
 export const Route = createFileRoute('/')({
   component: DashboardPage,
@@ -91,16 +81,19 @@ function Dashboard() {
   const setSSEConnected = useSetSSEConnected();
 
   // Modal state from store
-  const monitorModal = useMonitorModal();
   const groupModal = useGroupModal();
   const tagModal = useTagModal();
-  const settingsModal = useSettingsModal();
   const historyModal = useHistoryModal();
 
-  // Apply dark mode on mount
+  // Mobile detection
+  const [isMobile, setIsMobile] = useState(false);
+
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', darkMode);
-  }, [darkMode]);
+    const checkMobile = () => setIsMobile(window.innerWidth < 1024);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Data fetching
   const { data: groupedChecks, isLoading: isLoadingChecks } = useGroupedChecks(timeRange);
@@ -114,8 +107,6 @@ function Dashboard() {
   });
 
   // Mutations
-  const createCheck = useCreateCheck();
-  const updateCheck = useUpdateCheck();
   const deleteCheck = useDeleteCheck();
   const triggerCheck = useTriggerCheck();
   const toggleEnabled = useToggleCheckEnabled();
@@ -133,21 +124,6 @@ function Dashboard() {
       navigate({ to: '/login' });
     } catch (error) {
       showToast('Failed to logout', 'error');
-    }
-  };
-
-  const handleSaveCheck = async (data: CheckFormData) => {
-    try {
-      if (monitorModal.editingCheck) {
-        await updateCheck.mutateAsync({ id: monitorModal.editingCheck.id, data });
-        showToast('Monitor updated', 'success');
-      } else {
-        await createCheck.mutateAsync(data);
-        showToast('Monitor created', 'success');
-      }
-    } catch (error) {
-      showToast('Failed to save monitor', 'error');
-      throw error;
     }
   };
 
@@ -182,6 +158,14 @@ function Dashboard() {
       );
     } catch (error) {
       showToast('Failed to toggle monitor', 'error');
+    }
+  };
+
+  const handleSelectCheck = (check: Check) => {
+    if (isMobile) {
+      navigate({ to: `/monitor/${check.id}` });
+    } else {
+      selectCheck(check);
     }
   };
 
@@ -253,7 +237,7 @@ function Dashboard() {
         darkMode={darkMode}
         onToggleDarkMode={toggleDarkMode}
         onLogout={handleLogout}
-        onOpenSettings={settingsModal.open}
+        onOpenSettings={() => navigate({ to: '/settings' })}
         sseConnected={sseConnected}
       />
 
@@ -269,7 +253,7 @@ function Dashboard() {
           {/* Action Buttons */}
           <div className="flex gap-2">
             <button
-              onClick={() => monitorModal.open()}
+              onClick={() => navigate({ to: '/monitor/new' })}
               className="px-4 py-2 bg-terminal-green text-terminal-bg rounded font-bold text-xs uppercase tracking-wider hover:opacity-90 transition"
             >
               + Monitor
@@ -295,7 +279,7 @@ function Dashboard() {
           <div
             className={cn(
               'transition-all duration-300',
-              selectedCheck ? 'w-1/2 lg:w-2/3' : 'w-full'
+              selectedCheck && !isMobile ? 'w-1/2 lg:w-2/3' : 'w-full'
             )}
           >
             <MonitorsList
@@ -304,8 +288,8 @@ function Dashboard() {
               expandedGroups={expandedGroups}
               onToggleGroup={toggleGroup}
               selectedCheckId={selectedCheckId ?? undefined}
-              onSelectCheck={selectCheck}
-              onEditCheck={monitorModal.open}
+              onSelectCheck={handleSelectCheck}
+              onEditCheck={(check) => navigate({ to: `/monitor/${check.id}/edit` })}
               onDeleteCheck={handleDeleteCheck}
               onTriggerCheck={handleTriggerCheck}
               onToggleEnabled={handleToggleEnabled}
@@ -316,14 +300,14 @@ function Dashboard() {
             />
           </div>
 
-          {/* Right: Details Pane */}
-          {selectedCheck && (
+          {/* Right: Details Pane (Desktop only) */}
+          {selectedCheck && !isMobile && (
             <div className="w-1/2 lg:w-1/3">
               <DetailsPane
                 check={selectedCheck}
                 timeRange={timeRange}
                 onClose={() => selectCheck(null)}
-                onEditCheck={monitorModal.open}
+                onEditCheck={(check) => navigate({ to: `/monitor/${check.id}/edit` })}
                 onOpenHistory={historyModal.open}
               />
             </div>
@@ -332,13 +316,6 @@ function Dashboard() {
       </main>
 
       {/* Modals */}
-      <MonitorFormModal
-        isOpen={monitorModal.isOpen}
-        onClose={monitorModal.close}
-        onSave={handleSaveCheck}
-        editingCheck={monitorModal.editingCheck}
-      />
-
       <GroupModal
         isOpen={groupModal.isOpen}
         onClose={groupModal.close}
@@ -353,11 +330,6 @@ function Dashboard() {
         onSave={handleSaveTag}
         onDelete={tagModal.editingTag ? handleDeleteTag : undefined}
         editingTag={tagModal.editingTag}
-      />
-
-      <SettingsModal
-        isOpen={settingsModal.isOpen}
-        onClose={settingsModal.close}
       />
 
       {historyModal.check && (

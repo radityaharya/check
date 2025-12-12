@@ -27,12 +27,6 @@ interface UIState {
   sseConnected: boolean;
   setSSEConnected: (connected: boolean) => void;
 
-  // Monitor modal
-  monitorModalOpen: boolean;
-  editingCheck: Check | null;
-  openMonitorModal: (check?: Check | null) => void;
-  closeMonitorModal: () => void;
-
   // Group modal
   groupModalOpen: boolean;
   editingGroup: Group | null;
@@ -44,11 +38,6 @@ interface UIState {
   editingTag: Tag | null;
   openTagModal: (tag?: Tag | null) => void;
   closeTagModal: () => void;
-
-  // Settings modal
-  settingsModalOpen: boolean;
-  openSettingsModal: () => void;
-  closeSettingsModal: () => void;
 
   // History modal
   historyModalOpen: boolean;
@@ -98,14 +87,6 @@ export const useUIStore = create<UIState>()(
       sseConnected: false,
       setSSEConnected: (connected) => set({ sseConnected: connected }),
 
-      // Monitor modal
-      monitorModalOpen: false,
-      editingCheck: null,
-      openMonitorModal: (check = null) =>
-        set({ monitorModalOpen: true, editingCheck: check }),
-      closeMonitorModal: () =>
-        set({ monitorModalOpen: false, editingCheck: null }),
-
       // Group modal
       groupModalOpen: false,
       editingGroup: null,
@@ -121,11 +102,6 @@ export const useUIStore = create<UIState>()(
         set({ tagModalOpen: true, editingTag: tag }),
       closeTagModal: () =>
         set({ tagModalOpen: false, editingTag: null }),
-
-      // Settings modal
-      settingsModalOpen: false,
-      openSettingsModal: () => set({ settingsModalOpen: true }),
-      closeSettingsModal: () => set({ settingsModalOpen: false }),
 
       // History modal
       historyModalOpen: false,
@@ -160,16 +136,6 @@ export const useSSEConnected = () => useUIStore((s) => s.sseConnected);
 export const useSetSSEConnected = () => useUIStore((s) => s.setSSEConnected);
 
 // Modal hooks - use useShallow to prevent infinite loops from object references
-export const useMonitorModal = () =>
-  useUIStore(
-    useShallow((s) => ({
-      isOpen: s.monitorModalOpen,
-      editingCheck: s.editingCheck,
-      open: s.openMonitorModal,
-      close: s.closeMonitorModal,
-    }))
-  );
-
 export const useGroupModal = () =>
   useUIStore(
     useShallow((s) => ({
@@ -187,15 +153,6 @@ export const useTagModal = () =>
       editingTag: s.editingTag,
       open: s.openTagModal,
       close: s.closeTagModal,
-    }))
-  );
-
-export const useSettingsModal = () =>
-  useUIStore(
-    useShallow((s) => ({
-      isOpen: s.settingsModalOpen,
-      open: s.openSettingsModal,
-      close: s.closeSettingsModal,
     }))
   );
 
