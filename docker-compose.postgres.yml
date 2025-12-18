@@ -1,16 +1,16 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: gocheck-postgres
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: gocheck-timescaledb
     restart: unless-stopped
     environment:
       POSTGRES_DB: gocheck
       POSTGRES_USER: gocheck
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - timescaledb_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
@@ -26,10 +26,10 @@ services:
     container_name: gocheck
     restart: unless-stopped
     depends_on:
-      postgres:
+      timescaledb:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://gocheck:${POSTGRES_PASSWORD:-changeme}@postgres:5432/gocheck?sslmode=disable
+      DATABASE_URL: postgres://gocheck:${POSTGRES_PASSWORD:-changeme}@timescaledb:5432/gocheck?sslmode=disable
       DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
     ports:
       - "8080:8080"
@@ -42,7 +42,7 @@ services:
       retries: 3
 
 volumes:
-  postgres_data:
+  timescaledb_data:
     driver: local
 
 networks:

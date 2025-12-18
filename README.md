@@ -1,6 +1,6 @@
 # GoCheck - HTTP Uptime Monitor
 
-A lightweight HTTP uptime monitoring service built with Go, featuring a web dashboard with Alpine.js and Tailwind CSS, dual database support (SQLite/PostgreSQL), and Discord notifications.
+A lightweight HTTP uptime monitoring service built with Go, featuring a web dashboard with Alpine.js and Tailwind CSS, TimescaleDB for time-series data, and Discord notifications.
 
 ## Features
 
@@ -9,19 +9,19 @@ A lightweight HTTP uptime monitoring service built with Go, featuring a web dash
 - Real-time status dashboard
 - Check history and statistics
 - Discord and Gotify notifications on status changes
-- **Dual database support**: SQLite (default) or PostgreSQL for production
+- **TimescaleDB**: Production-ready time-series database with optimized performance
 - Modern web UI with Alpine.js and Tailwind CSS
 - Check grouping and tagging
 - Retry logic with configurable delays
+- Distributed monitoring with probe support
 
-## Database Support
+## Database
 
-gocheck supports both SQLite and PostgreSQL:
+gocheck uses TimescaleDB for storing monitoring data. TimescaleDB is a PostgreSQL extension optimized for time-series data, providing:
 
-- **SQLite** (default): Zero-configuration, file-based database
-- **PostgreSQL**: Production-ready with optimized indexing and performance
-
-See [DATABASE.md](DATABASE.md) for detailed configuration options.
+- Automatic time-based partitioning (hypertables)
+- Data compression for older data
+- Optimized queries for time-series workloads
 
 ## Installation
 
@@ -36,12 +36,15 @@ cd gocheck
 go mod download
 ```
 
-3. Configure the application:
+3. Set up TimescaleDB:
+   - Use the provided docker-compose file, or
+   - Set `DATABASE_URL` environment variable to your TimescaleDB instance
+
+4. Configure the application:
    - Edit `config.yaml` for basic settings
-   - Set `DATABASE_URL` environment variable for PostgreSQL
    - Set notification webhook URLs as needed
 
-4. Run the application:
+5. Run the application:
 ```bash
 go run main.go
 ```
@@ -50,12 +53,6 @@ The web interface will be available at `http://localhost:8080`
 
 ## Quick Start with Docker
 
-### SQLite (Default)
-```bash
-docker-compose up -d
-```
-
-### PostgreSQL
 ```bash
 docker-compose -f docker-compose.postgres.yml up -d
 ```
@@ -69,17 +66,14 @@ server:
   port: "8080"
 
 database:
-  path: "gocheck.db"  # SQLite database file
-  # url: "postgres://user:password@localhost:5432/gocheck?sslmode=disable"  # Optional: PostgreSQL URL
+  url: "postgres://user:password@localhost:5432/gocheck?sslmode=disable"
 ```
 
 ### Environment Variables
 
 - `CONFIG_PATH` - Override config file path (default: `config.yaml`)
-- `DATABASE_URL` - PostgreSQL connection string (e.g., `postgres://user:password@localhost:5432/gocheck`)
+- `DATABASE_URL` - TimescaleDB/PostgreSQL connection string (required)
 - `DISCORD_WEBHOOK_URL` - Discord webhook URL (overrides config file)
-
-For PostgreSQL configuration details, see [DATABASE.md](DATABASE.md).
 
 ## Usage
 

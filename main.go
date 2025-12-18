@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"strings"
 
 	"gocheck/internal/api"
 	"gocheck/internal/auth"
@@ -28,9 +27,7 @@ type Config struct {
 		Port string `yaml:"port"`
 	} `yaml:"server"`
 	Database struct {
-		Path      string `yaml:"path"`
-		URL       string `yaml:"url"`
-		Timescale bool   `yaml:"timescale"`
+		URL string `yaml:"url"`
 	} `yaml:"database"`
 }
 
@@ -53,9 +50,6 @@ func loadConfig() (*Config, error) {
 	if config.Server.Port == "" {
 		config.Server.Port = "8080"
 	}
-	if config.Database.Path == "" {
-		config.Database.Path = "gocheck.db"
-	}
 
 	// Override with environment variables if set
 	if port := os.Getenv("PORT"); port != "" {
@@ -63,9 +57,6 @@ func loadConfig() (*Config, error) {
 	}
 	if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
 		config.Database.URL = dbURL
-	}
-	if dbPath := os.Getenv("DATABASE_PATH"); dbPath != "" {
-		config.Database.Path = dbPath
 	}
 
 	return &config, nil
@@ -85,26 +76,15 @@ func main() {
 		log.Fatalf("Failed to create data directory: %v", err)
 	}
 
-	// Initialize database (PostgreSQL, TimescaleDB, or SQLite based on config)
-	var database *db.Database
-	if config.Database.URL != "" {
-		useTimescale := config.Database.Timescale || os.Getenv("USE_TIMESCALE") == "true" || strings.Contains(config.Database.URL, "timescale")
-		database, err = db.NewDatabaseWithURLOptions(config.Database.URL, config.Database.Path, useTimescale)
-		if err != nil {
-			log.Fatalf("Failed to initialize database: %v", err)
-		}
-		if useTimescale {
-			log.Printf("Using TimescaleDB database")
-		} else {
-			log.Printf("Using PostgreSQL database")
-		}
-	} else {
-		database, err = db.NewDatabase(config.Database.Path)
-		if err != nil {
-			log.Fatalf("Failed to initialize database: %v", err)
-		}
-		log.Printf("Using SQLite database at %s", config.Database.Path)
+	// Initialize TimescaleDB database
+	if config.Database.URL == "" {
+		log.Fatalf("Database URL is required. Set database.url in config.yaml or DATABASE_URL environment variable")
 	}
+	database, err := db.NewDatabaseWithURL(config.Database.URL)
+	if err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+	log.Printf("Using TimescaleDB database")
 	defer database.Close()
 
 	// Load notification settings from database or environment variables

@@ -1,4 +1,4 @@
-# SQLite database files
+# Database files
 *.db
 *.db-wal
 *.db-shm

@@ -6,7 +6,6 @@ require (
 	github.com/go-webauthn/webauthn v0.15.0
 	github.com/gorilla/mux v1.8.1
 	github.com/lib/pq v1.10.9
-	github.com/mattn/go-sqlite3 v1.14.32
 	golang.org/x/crypto v0.45.0
 	google.golang.org/grpc v1.77.0
 	google.golang.org/protobuf v1.36.11
