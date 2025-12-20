@@ -184,64 +184,71 @@ func (s *Service) performCapture(targetURL string) (data []byte, err error) {
 		return nil, fmt.Errorf("failed to build browserless URL: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(s.ctx, 120*time.Second)
+	// Use a shorter timeout than browserless (which is set to 120s)
+	// This ensures we close the browser BEFORE browserless times out and sends 429
+	ctx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
 	defer cancel()
 
-	type result struct {
-		data []byte
-		err  error
-	}
-	resChan := make(chan result, 1)
-
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				resChan <- result{err: fmt.Errorf("browser driver panic: %v", r)}
-			}
-		}()
-		captureData, captureErr := s.executeCapture(ctx, controlURL, targetURL)
-		resChan <- result{data: captureData, err: captureErr}
-	}()
-
-	select {
-	case res := <-resChan:
-		return res.data, res.err
-	case <-ctx.Done():
-		return nil, fmt.Errorf("capture timeout: %w", ctx.Err())
-	}
+	data, err = s.executeCapture(ctx, controlURL, targetURL)
+	return data, err
 }
 
 func (s *Service) executeCapture(ctx context.Context, controlURL, targetURL string) ([]byte, error) {
+	// Create browser with context for automatic cancellation
 	browser := rod.New().ControlURL(controlURL).Context(ctx)
 	
 	if err := browser.Connect(); err != nil {
-		return nil, fmt.Errorf("browserless connection failed: %w", err)
+		return nil, fmt.Errorf("browserless connection failed (check URL and token): %w", err)
 	}
-	defer browser.MustClose()
+	
+	// IMPORTANT: Close browser synchronously to terminate WebSocket before browserless can send 429
+	defer browser.Close()
 
 	page, err := browser.Page(proto.TargetCreateTarget{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to open browser page: %w", err)
 	}
-	defer page.MustClose()
+	defer page.Close()
 
-	page.MustSetViewport(1280, 800, 1, false)
-
-	if err := page.Navigate(targetURL); err != nil {
-		return nil, fmt.Errorf("navigation failed: %w", err)
+	if err := page.SetViewport(&proto.EmulationSetDeviceMetricsOverride{
+		Width:  1280,
+		Height: 800,
+	}); err != nil {
+		return nil, fmt.Errorf("failed to set viewport: %w", err)
 	}
 
-	_ = rod.Try(func() {
-		page.MustWaitLoad().MustWaitIdle()
-	})
+	if err := page.Navigate(targetURL); err != nil {
+		return nil, fmt.Errorf("navigation to %s failed: %w", targetURL, err)
+	}
 
-	time.Sleep(2 * time.Second)
+	// Wait for page to fully load
+	if err := page.WaitLoad(); err != nil {
+		// Log but don't fail - page might still be usable
+		log.Printf("snapshot: WaitLoad warning for %s: %v", targetURL, err)
+	}
+
+	// Wait for network to be idle (no requests for 500ms)
+	if err := page.WaitIdle(10 * time.Second); err != nil {
+		log.Printf("snapshot: WaitIdle warning for %s: %v", targetURL, err)
+	}
+
+	// Wait for DOM content to be loaded and rendered
+	// This helps with SPAs and JS-heavy sites
+	_ = page.WaitDOMStable(2*time.Second, 0.1)
+
+	// Additional wait for any animations, lazy-loaded images, etc.
+	time.Sleep(3 * time.Second)
 
 	quality := 90
-	return page.Screenshot(false, &proto.PageCaptureScreenshot{
+	screenshot, err := page.Screenshot(false, &proto.PageCaptureScreenshot{
 		Format:  proto.PageCaptureScreenshotFormatPng,
 		Quality: &quality,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("screenshot capture failed: %w", err)
+	}
+
+	return screenshot, nil
 }
 
 func (s *Service) buildBrowserlessURL(rawURL, token string) (string, error) {
@@ -271,30 +278,50 @@ func (s *Service) buildBrowserlessURL(rawURL, token string) (string, error) {
 		return "", fmt.Errorf("invalid browserless url: %w", err)
 	}
 
+	// Build launch args as JSON for browserless v2
+	// Use a LONGER timeout for browserless than our Go context, so we can close cleanly
+	launchArgs := `{"args":["--disable-dev-shm-usage","--no-sandbox"],"timeout":120000}`
+
 	q := u.Query()
 	q.Set("token", token)
-	q.Set("--disable-dev-shm-usage", "true")
-	q.Set("--no-sandbox", "true")
+	q.Set("launch", launchArgs)
+	q.Set("timeout", "120000") // 120 seconds - longer than Go timeout so we close first
 	u.RawQuery = q.Encode()
 
 	return u.String(), nil
 }
 
 func (s *Service) resolveTargetURL(check models.Check) (string, error) {
-	if check.URL != "" {
-		return check.URL, nil
-	}
+	var targetURL string
 
-	if check.Type == models.CheckTypeTailscaleService && check.TailscaleServiceHost != "" {
+	if check.URL != "" {
+		targetURL = check.URL
+	} else if check.Type == models.CheckTypeTailscaleService && check.TailscaleServiceHost != "" {
 		port := check.TailscaleServicePort
 		if port == 0 {
 			port = 80
 		}
 		path := "/" + strings.TrimPrefix(check.TailscaleServicePath, "/")
-		return fmt.Sprintf("%s://%s:%d%s", check.TailscaleServiceProtocol, check.TailscaleServiceHost, port, path), nil
+		targetURL = fmt.Sprintf("%s://%s:%d%s", check.TailscaleServiceProtocol, check.TailscaleServiceHost, port, path)
 	}
 
-	return "", fmt.Errorf("no valid URL or Tailscale host defined for check")
+	if targetURL == "" {
+		return "", fmt.Errorf("no valid URL or Tailscale host defined for check")
+	}
+
+	// Validate the URL
+	parsed, err := url.Parse(targetURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid URL %q: %w", targetURL, err)
+	}
+	if parsed.Host == "" {
+		return "", fmt.Errorf("invalid URL %q: missing host", targetURL)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", fmt.Errorf("invalid URL %q: scheme must be http or https", targetURL)
+	}
+
+	return targetURL, nil
 }
 
 func (s *Service) isTailscale(check models.Check) bool {
