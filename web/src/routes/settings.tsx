@@ -52,11 +52,11 @@ function SettingsContent() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [formData, setFormData] = useState<Partial<Settings>>({});
 
-  useState(() => {
+  useEffect(() => {
     if (settings) {
       setFormData(settings);
     }
-  });
+  }, [settings]);
 
   const handleSaveSettings = async () => {
     try {
