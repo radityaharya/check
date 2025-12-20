@@ -126,7 +126,7 @@ export function DetailsPane({
     <div className={cn(
       isPage 
         ? "bg-terminal-bg" 
-        : "bg-terminal-surface border border-terminal-border rounded-lg lg:sticky lg:top-24 max-h-[calc(100vh-8rem)] overflow-y-auto overflow-x-hidden"
+        : "bg-terminal-surface border border-terminal-border rounded-sm lg:sticky lg:top-24 max-h-[calc(100vh-8rem)] overflow-y-auto overflow-x-hidden"
     )}>
       {!check ? (
         <div className="p-6 text-terminal-muted">

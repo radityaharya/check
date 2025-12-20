@@ -67,7 +67,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="lg">
-      <ModalHeader onClose={onClose}>$ settings</ModalHeader>
+      <ModalHeader onClose={onClose}>settings</ModalHeader>
 
       {isLoading ? (
         <div className="p-6 flex justify-center">

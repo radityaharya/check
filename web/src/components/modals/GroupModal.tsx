@@ -69,7 +69,7 @@ export function GroupModal({
     <Modal isOpen={isOpen} onClose={onClose} size="sm">
       <form onSubmit={handleSubmit}>
         <ModalHeader onClose={onClose}>
-          {editingGroup ? '$ edit group' : '$ new group'}
+          {editingGroup ? 'edit group' : 'new group'}
         </ModalHeader>
 
         <div className="px-6 py-4 space-y-4">

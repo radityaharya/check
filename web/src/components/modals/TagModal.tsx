@@ -71,7 +71,7 @@ export function TagModal({
     <Modal isOpen={isOpen} onClose={onClose} size="sm">
       <form onSubmit={handleSubmit}>
         <ModalHeader onClose={onClose}>
-          {editingTag ? '$ edit tag' : '$ new tag'}
+          {editingTag ? 'edit tag' : 'new tag'}
         </ModalHeader>
 
         <div className="px-6 py-4 space-y-4">

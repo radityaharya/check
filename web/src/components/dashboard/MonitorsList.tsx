@@ -52,7 +52,7 @@ export function MonitorsList({
 
   if (isLoading) {
     return (
-      <div className="bg-terminal-surface border border-terminal-border rounded-lg overflow-hidden">
+      <div className="bg-terminal-surface border border-terminal-border rounded-sm overflow-hidden">
         {Array.from({ length: 3 }).map((_, i) => (
           <div key={i} className="border-b border-terminal-border last:border-b-0">
             <div className="flex items-center gap-4 p-4 border-b border-terminal-border">
@@ -84,7 +84,7 @@ export function MonitorsList({
 
   if (groups.length === 0) {
     return (
-      <div className="text-center py-20 border border-dashed border-terminal-border rounded-lg">
+      <div className="text-center py-20 border border-dashed border-terminal-border rounded-sm">
         <div className="text-terminal-muted mb-2 text-4xl">_</div>
         <div className="text-terminal-muted mb-4 text-sm">
           no monitors configured
@@ -94,7 +94,7 @@ export function MonitorsList({
   }
 
   return (
-    <div className="bg-terminal-surface border border-terminal-border rounded-lg overflow-hidden">
+    <div className="bg-terminal-surface border border-terminal-border rounded-sm overflow-hidden">
       {groups.map((group) => (
         <GroupItem
           key={group.id}

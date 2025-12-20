@@ -13,11 +13,8 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as MonitorNewRouteImport } from './routes/monitor/new'
-import { Route as DemoTanstackQueryRouteImport } from './routes/demo/tanstack-query'
 import { Route as MonitorIdIndexRouteImport } from './routes/monitor/$id/index'
 import { Route as MonitorIdEditRouteImport } from './routes/monitor/$id/edit'
-import { Route as DemoFormSimpleRouteImport } from './routes/demo/form.simple'
-import { Route as DemoFormAddressRouteImport } from './routes/demo/form.address'
 
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
@@ -39,11 +36,6 @@ const MonitorNewRoute = MonitorNewRouteImport.update({
   path: '/monitor/new',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DemoTanstackQueryRoute = DemoTanstackQueryRouteImport.update({
-  id: '/demo/tanstack-query',
-  path: '/demo/tanstack-query',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const MonitorIdIndexRoute = MonitorIdIndexRouteImport.update({
   id: '/monitor/$id/',
   path: '/monitor/$id/',
@@ -54,25 +46,12 @@ const MonitorIdEditRoute = MonitorIdEditRouteImport.update({
   path: '/monitor/$id/edit',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DemoFormSimpleRoute = DemoFormSimpleRouteImport.update({
-  id: '/demo/form/simple',
-  path: '/demo/form/simple',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DemoFormAddressRoute = DemoFormAddressRouteImport.update({
-  id: '/demo/form/address',
-  path: '/demo/form/address',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
-  '/demo/tanstack-query': typeof DemoTanstackQueryRoute
   '/monitor/new': typeof MonitorNewRoute
-  '/demo/form/address': typeof DemoFormAddressRoute
-  '/demo/form/simple': typeof DemoFormSimpleRoute
   '/monitor/$id/edit': typeof MonitorIdEditRoute
   '/monitor/$id': typeof MonitorIdIndexRoute
 }
@@ -80,10 +59,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
-  '/demo/tanstack-query': typeof DemoTanstackQueryRoute
   '/monitor/new': typeof MonitorNewRoute
-  '/demo/form/address': typeof DemoFormAddressRoute
-  '/demo/form/simple': typeof DemoFormSimpleRoute
   '/monitor/$id/edit': typeof MonitorIdEditRoute
   '/monitor/$id': typeof MonitorIdIndexRoute
 }
@@ -92,10 +68,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
-  '/demo/tanstack-query': typeof DemoTanstackQueryRoute
   '/monitor/new': typeof MonitorNewRoute
-  '/demo/form/address': typeof DemoFormAddressRoute
-  '/demo/form/simple': typeof DemoFormSimpleRoute
   '/monitor/$id/edit': typeof MonitorIdEditRoute
   '/monitor/$id/': typeof MonitorIdIndexRoute
 }
@@ -105,10 +78,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/settings'
-    | '/demo/tanstack-query'
     | '/monitor/new'
-    | '/demo/form/address'
-    | '/demo/form/simple'
     | '/monitor/$id/edit'
     | '/monitor/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -116,10 +86,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/settings'
-    | '/demo/tanstack-query'
     | '/monitor/new'
-    | '/demo/form/address'
-    | '/demo/form/simple'
     | '/monitor/$id/edit'
     | '/monitor/$id'
   id:
@@ -127,10 +94,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/settings'
-    | '/demo/tanstack-query'
     | '/monitor/new'
-    | '/demo/form/address'
-    | '/demo/form/simple'
     | '/monitor/$id/edit'
     | '/monitor/$id/'
   fileRoutesById: FileRoutesById
@@ -139,10 +103,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
   SettingsRoute: typeof SettingsRoute
-  DemoTanstackQueryRoute: typeof DemoTanstackQueryRoute
   MonitorNewRoute: typeof MonitorNewRoute
-  DemoFormAddressRoute: typeof DemoFormAddressRoute
-  DemoFormSimpleRoute: typeof DemoFormSimpleRoute
   MonitorIdEditRoute: typeof MonitorIdEditRoute
   MonitorIdIndexRoute: typeof MonitorIdIndexRoute
 }
@@ -177,13 +138,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MonitorNewRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/demo/tanstack-query': {
-      id: '/demo/tanstack-query'
-      path: '/demo/tanstack-query'
-      fullPath: '/demo/tanstack-query'
-      preLoaderRoute: typeof DemoTanstackQueryRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/monitor/$id/': {
       id: '/monitor/$id/'
       path: '/monitor/$id'
@@ -198,20 +152,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MonitorIdEditRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/demo/form/simple': {
-      id: '/demo/form/simple'
-      path: '/demo/form/simple'
-      fullPath: '/demo/form/simple'
-      preLoaderRoute: typeof DemoFormSimpleRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/demo/form/address': {
-      id: '/demo/form/address'
-      path: '/demo/form/address'
-      fullPath: '/demo/form/address'
-      preLoaderRoute: typeof DemoFormAddressRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
@@ -219,10 +159,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
   SettingsRoute: SettingsRoute,
-  DemoTanstackQueryRoute: DemoTanstackQueryRoute,
   MonitorNewRoute: MonitorNewRoute,
-  DemoFormAddressRoute: DemoFormAddressRoute,
-  DemoFormSimpleRoute: DemoFormSimpleRoute,
   MonitorIdEditRoute: MonitorIdEditRoute,
   MonitorIdIndexRoute: MonitorIdIndexRoute,
 }

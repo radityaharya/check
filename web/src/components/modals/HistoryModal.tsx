@@ -68,7 +68,7 @@ export function HistoryModal({
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="lg">
       <ModalHeader onClose={onClose}>
-        $ history: {check.name}
+        history: {check.name}
       </ModalHeader>
 
       {/* Stats Summary */}

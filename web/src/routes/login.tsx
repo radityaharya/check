@@ -77,13 +77,12 @@ function SetupScreen() {
   return (
     <div className="min-h-screen bg-terminal-bg flex items-center justify-center px-4">
       <div className="w-full max-w-md">
-        <div className="bg-terminal-surface border border-terminal-border rounded-lg p-8">
+        <div className="bg-terminal-surface border border-terminal-border rounded-sm p-8">
           {/* Header */}
           <div className="text-center mb-8">
             <div className="flex items-center justify-center gap-2 mb-4">
-              <div className="w-3 h-3 rounded-full bg-terminal-green animate-pulse" />
               <h1 className="text-xl font-bold text-terminal-text">
-                gocheck
+                check
               </h1>
             </div>
             <p className="text-terminal-muted text-sm">
@@ -189,13 +188,12 @@ function LoginScreen() {
   return (
     <div className="min-h-screen bg-terminal-bg flex items-center justify-center px-4">
       <div className="w-full max-w-md">
-        <div className="bg-terminal-surface border border-terminal-border rounded-lg p-8">
+        <div className="bg-terminal-surface border border-terminal-border rounded-sm p-8">
           {/* Header */}
           <div className="text-center mb-8">
             <div className="flex items-center justify-center gap-2 mb-4">
-              <div className="w-3 h-3 rounded-full bg-terminal-green animate-pulse" />
               <h1 className="text-xl font-bold text-terminal-text">
-                gocheck
+                check
               </h1>
             </div>
             <p className="text-terminal-muted text-sm">

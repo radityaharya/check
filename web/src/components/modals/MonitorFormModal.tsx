@@ -164,7 +164,7 @@ export function MonitorFormModal({
         <div className="bg-terminal-surface border-b border-terminal-border sticky top-0 z-10">
           <div className="container mx-auto px-6 py-4 flex justify-between items-center">
             <h2 className="text-lg font-bold text-terminal-green">
-              {editingCheck ? '$ edit monitor' : '$ new monitor'}
+              {editingCheck ? 'edit monitor' : 'new monitor'}
             </h2>
             <button
               onClick={onClose}
@@ -196,7 +196,7 @@ export function MonitorFormModal({
                         type="button"
                         onClick={() => field.handleChange(ct.type)}
                         className={cn(
-                          'p-4 rounded-lg border-2 transition text-left',
+                          'p-4 rounded-sm border-2 transition text-left',
                           field.state.value === ct.type
                             ? `border-${ct.color} bg-${ct.color}/10`
                             : 'border-terminal-border hover:border-terminal-muted'
@@ -325,7 +325,7 @@ export function MonitorFormModal({
             </form.Subscribe>
 
             {/* Active Monitoring Toggle */}
-            <div className="p-4 bg-terminal-surface border border-terminal-border rounded-lg mb-8">
+            <div className="p-4 bg-terminal-surface border border-terminal-border rounded-sm mb-8">
               <form.AppField
                 name="enabled"
                 children={(field) => (
@@ -367,7 +367,7 @@ export function MonitorFormModal({
 // biome-ignore lint/suspicious/noExplicitAny: Form typing is complex
 function HTTPFields({ form, isJsonHttp }: { form: any; isJsonHttp: boolean }) {
   return (
-    <div className="space-y-6 mb-8 p-6 bg-terminal-surface border border-terminal-border rounded-lg">
+    <div className="space-y-6 mb-8 p-6 bg-terminal-surface border border-terminal-border rounded-sm">
       <div className="text-xs text-terminal-muted uppercase tracking-widest mb-4">
         HTTP Configuration
       </div>
@@ -453,7 +453,7 @@ function HTTPFields({ form, isJsonHttp }: { form: any; isJsonHttp: boolean }) {
 // biome-ignore lint/suspicious/noExplicitAny: Form typing is complex
 function PingFields({ form }: { form: any }) {
   return (
-    <div className="space-y-6 mb-8 p-6 bg-terminal-surface border border-terminal-border rounded-lg">
+    <div className="space-y-6 mb-8 p-6 bg-terminal-surface border border-terminal-border rounded-sm">
       <div className="text-xs text-terminal-cyan uppercase tracking-widest mb-4">
         Ping Configuration
       </div>
@@ -474,7 +474,7 @@ function PingFields({ form }: { form: any }) {
 // biome-ignore lint/suspicious/noExplicitAny: Form typing is complex
 function DNSFields({ form }: { form: any }) {
   return (
-    <div className="space-y-6 mb-8 p-6 bg-terminal-surface border border-terminal-border rounded-lg">
+    <div className="space-y-6 mb-8 p-6 bg-terminal-surface border border-terminal-border rounded-sm">
       <div className="text-xs text-terminal-green uppercase tracking-widest mb-4">
         DNS Configuration
       </div>
@@ -521,7 +521,7 @@ function DNSFields({ form }: { form: any }) {
 // biome-ignore lint/suspicious/noExplicitAny: Form typing is complex
 function PostgresFields({ form }: { form: any }) {
   return (
-    <div className="space-y-6 mb-8 p-6 bg-terminal-surface border border-terminal-border rounded-lg">
+    <div className="space-y-6 mb-8 p-6 bg-terminal-surface border border-terminal-border rounded-sm">
       <div className="text-xs text-terminal-purple uppercase tracking-widest mb-4">
         PostgreSQL Configuration
       </div>
@@ -585,7 +585,7 @@ function TailscaleFields({
   hasTailscale,
 }: TailscaleFieldsProps) {
   return (
-    <div className="space-y-6 mb-8 p-6 bg-terminal-surface border border-terminal-border rounded-lg">
+    <div className="space-y-6 mb-8 p-6 bg-terminal-surface border border-terminal-border rounded-sm">
       <div className="text-xs text-terminal-cyan uppercase tracking-widest mb-4">
         Tailscale Configuration
       </div>
@@ -650,7 +650,7 @@ function TailscaleServiceFields({
   hasTailscale,
 }: TailscaleFieldsProps) {
   return (
-    <div className="space-y-6 mb-8 p-6 bg-terminal-surface border border-terminal-border rounded-lg">
+    <div className="space-y-6 mb-8 p-6 bg-terminal-surface border border-terminal-border rounded-sm">
       <div className="text-xs text-terminal-purple uppercase tracking-widest mb-4">
         Tailscale Service Configuration
       </div>

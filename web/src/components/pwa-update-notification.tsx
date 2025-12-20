@@ -64,7 +64,7 @@ export function PwaUpdateNotification() {
 
       {canInstall && (
         <div
-          className={`fixed bottom-4 right-4 bg-terminal-surface border border-terminal-border rounded-lg shadow-2xl p-4 max-w-sm z-50 transition-all duration-300 ${
+          className={`fixed bottom-4 right-4 bg-terminal-surface border border-terminal-border rounded-sm shadow-2xl p-4 max-w-sm z-50 transition-all duration-300 ${
             showInstallPrompt
               ? 'opacity-100 translate-y-0'
               : 'opacity-0 translate-y-4 pointer-events-none'

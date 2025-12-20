@@ -72,7 +72,7 @@ function ToastItem({
   return (
     <div
       className={cn(
-        'max-w-sm bg-terminal-surface border border-terminal-border rounded-lg shadow-2xl px-4 py-3 transition-all duration-150',
+        'max-w-sm bg-terminal-surface border border-terminal-border rounded-sm shadow-2xl px-4 py-3 transition-all duration-150',
         isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-4'
       )}
     >

@@ -63,7 +63,7 @@ export function Modal({
     >
       <div
         className={cn(
-          'bg-terminal-surface border border-terminal-border rounded-lg shadow-2xl w-full',
+          'bg-terminal-surface border border-terminal-border rounded-sm shadow-2xl w-full',
           sizeClasses[size],
           className
         )}

@@ -11,7 +11,7 @@ export default function Header() {
       <header className="p-4 flex items-center bg-gray-800 text-white shadow-lg">
         <button
           onClick={() => setIsOpen(true)}
-          className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
+          className="p-2 hover:bg-gray-700 rounded-sm transition-colors"
           aria-label="Open menu"
         >
           <Menu size={24} />
@@ -36,7 +36,7 @@ export default function Header() {
           <h2 className="text-xl font-bold">Navigation</h2>
           <button
             onClick={() => setIsOpen(false)}
-            className="p-2 hover:bg-gray-800 rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-800 rounded-sm transition-colors"
             aria-label="Close menu"
           >
             <X size={24} />
@@ -47,10 +47,10 @@ export default function Header() {
           <Link
             to="/"
             onClick={() => setIsOpen(false)}
-            className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-800 transition-colors mb-2"
+            className="flex items-center gap-3 p-3 rounded-sm hover:bg-gray-800 transition-colors mb-2"
             activeProps={{
               className:
-                'flex items-center gap-3 p-3 rounded-lg bg-cyan-600 hover:bg-cyan-700 transition-colors mb-2',
+                'flex items-center gap-3 p-3 rounded-sm bg-cyan-600 hover:bg-cyan-700 transition-colors mb-2',
             }}
           >
             <Home size={20} />
@@ -62,10 +62,10 @@ export default function Header() {
           <Link
             to="/demo/tanstack-query"
             onClick={() => setIsOpen(false)}
-            className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-800 transition-colors mb-2"
+            className="flex items-center gap-3 p-3 rounded-sm hover:bg-gray-800 transition-colors mb-2"
             activeProps={{
               className:
-                'flex items-center gap-3 p-3 rounded-lg bg-cyan-600 hover:bg-cyan-700 transition-colors mb-2',
+                'flex items-center gap-3 p-3 rounded-sm bg-cyan-600 hover:bg-cyan-700 transition-colors mb-2',
             }}
           >
             <Network size={20} />
@@ -75,10 +75,10 @@ export default function Header() {
           <Link
             to="/demo/form/simple"
             onClick={() => setIsOpen(false)}
-            className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-800 transition-colors mb-2"
+            className="flex items-center gap-3 p-3 rounded-sm hover:bg-gray-800 transition-colors mb-2"
             activeProps={{
               className:
-                'flex items-center gap-3 p-3 rounded-lg bg-cyan-600 hover:bg-cyan-700 transition-colors mb-2',
+                'flex items-center gap-3 p-3 rounded-sm bg-cyan-600 hover:bg-cyan-700 transition-colors mb-2',
             }}
           >
             <ClipboardType size={20} />
@@ -88,10 +88,10 @@ export default function Header() {
           <Link
             to="/demo/form/address"
             onClick={() => setIsOpen(false)}
-            className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-800 transition-colors mb-2"
+            className="flex items-center gap-3 p-3 rounded-sm hover:bg-gray-800 transition-colors mb-2"
             activeProps={{
               className:
-                'flex items-center gap-3 p-3 rounded-lg bg-cyan-600 hover:bg-cyan-700 transition-colors mb-2',
+                'flex items-center gap-3 p-3 rounded-sm bg-cyan-600 hover:bg-cyan-700 transition-colors mb-2',
             }}
           >
             <ClipboardType size={20} />

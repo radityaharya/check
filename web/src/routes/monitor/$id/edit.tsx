@@ -70,7 +70,7 @@ function EditMonitor() {
     <div className="min-h-screen bg-terminal-bg text-terminal-text font-mono">
       <div className="bg-terminal-surface border-b border-terminal-border sticky top-0 z-10">
         <div className="container mx-auto px-6 py-4 flex justify-between items-center">
-          <h2 className="text-lg font-bold text-terminal-green">$ edit monitor</h2>
+          <h2 className="text-lg font-bold text-terminal-green">edit monitor</h2>
           <button
             onClick={handleCancel}
             className="text-terminal-muted hover:text-terminal-text text-2xl"

@@ -84,7 +84,7 @@ export function StatsGrid({ stats, isLoading }: StatsGridProps) {
         {[1, 2, 3, 4].map((i) => (
           <div
             key={i}
-            className="bg-terminal-surface border border-terminal-border rounded-lg p-4"
+            className="bg-terminal-surface border border-terminal-border rounded-sm p-4"
           >
             <div className="h-3 w-16 rounded skeleton mb-3" />
             <div className="h-7 w-24 rounded skeleton" />
@@ -122,7 +122,7 @@ interface StatCardProps {
 
 function StatCard({ label, value, className }: StatCardProps) {
   return (
-    <div className="bg-terminal-surface border border-terminal-border rounded-lg p-4 hover:border-terminal-muted transition">
+    <div className="bg-terminal-surface border border-terminal-border rounded-sm p-4 hover:border-terminal-muted transition">
       <div className="text-[10px] text-terminal-muted uppercase tracking-widest mb-1">
         {label}
       </div>
