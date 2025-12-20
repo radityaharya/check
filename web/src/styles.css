@@ -7,6 +7,10 @@
 
 @custom-variant dark (&:is(.dark *));
 
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   @apply m-0 bg-terminal-bg text-terminal-text;
   font-family: 'JetBrains Mono', Menlo, Consolas, monospace;
@@ -185,23 +189,36 @@ code {
   --color-terminal-cyan: rgb(var(--t-cyan));
 }
 
-/* Scrollbar styles */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* Scrollbar styles - Stable scrollbar to prevent layout shifts */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--t-scroll-thumb) var(--t-scroll-track);
 }
 
-::-webkit-scrollbar-track {
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
   background: var(--t-scroll-track);
+  border-radius: 4px;
 }
 
-::-webkit-scrollbar-thumb {
+*::-webkit-scrollbar-thumb {
   background: var(--t-scroll-thumb);
-  border-radius: 3px;
+  border-radius: 4px;
+  border: 1px solid var(--t-scroll-track);
 }
 
-::-webkit-scrollbar-thumb:hover {
+*::-webkit-scrollbar-thumb:hover {
   background: var(--t-scroll-thumb-hover);
+}
+
+/* Prevent layout shift for scrollable containers */
+[data-scrollable] {
+  scrollbar-gutter: stable;
+  overflow-y: auto;
 }
 
 /* Glow effects */

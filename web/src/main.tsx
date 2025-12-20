@@ -10,6 +10,26 @@ import { routeTree } from './routeTree.gen'
 import './styles.css'
 import reportWebVitals from './reportWebVitals.ts'
 
+if ('serviceWorker' in navigator) {
+  import('virtual:pwa-register')
+    .then(({ registerSW }) => {
+      registerSW({
+        immediate: true,
+        onRegistered(registration: ServiceWorkerRegistration | undefined) {
+          if (registration) {
+            console.log('Service Worker registered:', registration);
+          }
+        },
+        onRegisterError(error: Error) {
+          console.error('Service Worker registration error:', error);
+        },
+      });
+    })
+    .catch(() => {
+      // virtual:pwa-register may not be available in dev mode
+    });
+}
+
 // Create a new router instance
 
 const TanStackQueryProviderContext = TanStackQueryProvider.getContext()

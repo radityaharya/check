@@ -4,6 +4,7 @@ import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools';
 import { TanStackDevtools } from '@tanstack/react-devtools';
 import { useDarkMode } from '@/store';
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools';
+import { PwaUpdateNotification } from '@/components/pwa-update-notification';
 
 import type { QueryClient } from '@tanstack/react-query';
 
@@ -21,6 +22,7 @@ function RootComponent() {
   return (
     <>
       <Outlet />
+      <PwaUpdateNotification />
       {process.env.NODE_ENV === 'development' && (
         <TanStackDevtools
           config={{

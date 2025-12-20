@@ -5,6 +5,7 @@ export * from './use-settings';
 export * from './use-sse';
 export * from './use-time-ago';
 export * from './use-probes';
+export * from './use-pwa';
 export * from './form';
 export * from './form-context';
 
