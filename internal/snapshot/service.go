@@ -138,11 +138,31 @@ func (s *Service) refreshAll() {
 		return
 	}
 
+	now := time.Now().UTC()
 	for _, check := range checks {
 		if s.isTailscale(check) {
 			continue
 		}
-		_ = s.CaptureCheck(check.ID)
+
+		snapshot, err := s.db.GetCheckSnapshot(check.ID)
+		if err != nil {
+			log.Printf("snapshot: failed to get snapshot for check %d: %v", check.ID, err)
+			continue
+		}
+
+		needsRefresh := false
+		if snapshot == nil || snapshot.TakenAt == nil {
+			needsRefresh = true
+		} else {
+			age := now.Sub(*snapshot.TakenAt)
+			if age >= refreshInterval {
+				needsRefresh = true
+			}
+		}
+
+		if needsRefresh {
+			_ = s.CaptureCheck(check.ID)
+		}
 	}
 }
 
