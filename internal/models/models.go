@@ -284,8 +284,8 @@ type Settings struct {
 	GotifyToken       string `json:"gotify_token"`
 	TailscaleAPIKey   string `json:"tailscale_api_key"`
 	TailscaleTailnet  string `json:"tailscale_tailnet"`
-	CloudflareAccountID string `json:"cloudflare_account_id"`
-	CloudflareAPIToken  string `json:"cloudflare_api_token"`
+	BrowserlessURL    string `json:"browserless_url"`
+	BrowserlessToken  string `json:"browserless_token"`
 }
 
 type CheckSnapshot struct {

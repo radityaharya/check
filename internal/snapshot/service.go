@@ -1,21 +1,18 @@
 package snapshot
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"html"
-	"io"
 	"log"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/proto"
 
 	"gocheck/internal/checker"
 	"gocheck/internal/db"
@@ -24,74 +21,59 @@ import (
 
 const refreshInterval = 6 * time.Hour
 
-// Service periodically captures webpage screenshots for checks using Cloudflare Browser Rendering.
 type Service struct {
 	db            *db.Database
 	engine        *checker.Engine
-	client        *http.Client
 	dataDir       string
 	screenshotDir string
 	ctx           context.Context
 	cancel        context.CancelFunc
 	wg            sync.WaitGroup
+	sem chan struct{}
 }
 
-// NewService builds a snapshot service with a default HTTP client and paths.
 func NewService(database *db.Database, engine *checker.Engine, dataDir string) *Service {
 	absDataDir, err := filepath.Abs(dataDir)
-	if err == nil {
-		dataDir = absDataDir
+	if err != nil {
+		absDataDir = dataDir
 	}
+
 	ctx, cancel := context.WithCancel(context.Background())
+
 	return &Service{
 		db:            database,
 		engine:        engine,
-		client:        &http.Client{Timeout: 60 * time.Second},
-		dataDir:       dataDir,
-		screenshotDir: filepath.Join(dataDir, "screenshots"),
+		dataDir:       absDataDir,
+		screenshotDir: filepath.Join(absDataDir, "screenshots"),
 		ctx:           ctx,
 		cancel:        cancel,
+		sem:           make(chan struct{}, 1),
 	}
 }
 
-// Start begins the periodic refresh loop with an initial capture attempt.
 func (s *Service) Start() {
 	s.wg.Add(1)
 	go s.run()
 }
 
-// Stop halts the refresh loop.
 func (s *Service) Stop() {
 	s.cancel()
 	s.wg.Wait()
 }
 
-// TriggerRefresh launches a refresh cycle asynchronously.
 func (s *Service) TriggerRefresh() {
 	go s.refreshAll()
 }
 
-// CaptureCheck runs a one-off snapshot for a single check ID.
 func (s *Service) CaptureCheck(checkID int64) error {
-	accountID, apiToken, err := s.loadCredentials()
-	if err != nil {
-		log.Printf("snapshot: load credentials error: %v", err)
-		return err
-	}
-	if accountID == "" || apiToken == "" {
-		return fmt.Errorf("cloudflare credentials not configured")
-	}
-
-	if err := os.MkdirAll(s.screenshotDir, 0755); err != nil {
-		return fmt.Errorf("prepare screenshot dir: %w", err)
-	}
-
 	check, err := s.db.GetCheck(checkID)
-	if err != nil {
-		return err
+	if err != nil || check == nil {
+		return fmt.Errorf("check %d not found in database", checkID)
 	}
-	if check == nil {
-		return fmt.Errorf("check not found")
+
+	if s.isTailscale(*check) {
+		log.Printf("snapshot: skipping check %d (Tailscale/Private network logic ignored)", checkID)
+		return nil
 	}
 
 	targetURL, err := s.resolveTargetURL(*check)
@@ -100,13 +82,37 @@ func (s *Service) CaptureCheck(checkID int64) error {
 		return err
 	}
 
-	if err := s.captureSnapshot(checkID, targetURL, accountID, apiToken); err != nil {
+	data, err := s.performCapture(targetURL)
+	if err != nil {
+		s.storeFailure(checkID, "", err.Error())
 		return err
 	}
 
+	if err := os.MkdirAll(s.screenshotDir, 0755); err != nil {
+		return fmt.Errorf("failed to create screenshot directory: %w", err)
+	}
+
+	filePath := filepath.Join(s.screenshotDir, fmt.Sprintf("check_%d.png", checkID))
+	if err := os.WriteFile(filePath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
+	}
+
+	now := time.Now().UTC()
+	err = s.db.UpsertCheckSnapshot(&models.CheckSnapshot{
+		CheckID:   checkID,
+		FilePath:  filePath,
+		TakenAt:   &now,
+		LastError: "",
+	})
+
 	s.broadcastSnapshot(checkID)
-	return nil
+	return err
 }
+
+func (s *Service) TestSnapshot(targetURL string) ([]byte, error) {
+	return s.performCapture(targetURL)
+}
+
 
 func (s *Service) run() {
 	defer s.wg.Done()
@@ -126,185 +132,178 @@ func (s *Service) run() {
 }
 
 func (s *Service) refreshAll() {
-	accountID, apiToken, err := s.loadCredentials()
-	if err != nil {
-		return
-	}
-	if accountID == "" || apiToken == "" {
-		return
-	}
-
-	if err := os.MkdirAll(s.screenshotDir, 0755); err != nil {
-		return
-	}
-
 	checks, err := s.db.GetAllChecks()
 	if err != nil {
+		log.Printf("snapshot: failed to list checks for refresh: %v", err)
 		return
 	}
 
 	for _, check := range checks {
-		targetURL, err := s.resolveTargetURL(check)
-		if err != nil {
-			s.storeFailure(check.ID, "", err.Error())
+		if s.isTailscale(check) {
 			continue
 		}
-		_ = s.captureSnapshot(check.ID, targetURL, accountID, apiToken)
-		s.broadcastSnapshot(check.ID)
+		_ = s.CaptureCheck(check.ID)
 	}
 }
 
-func (s *Service) loadCredentials() (string, string, error) {
-	accountID, err := s.db.GetSetting("cloudflare_account_id")
-	if err != nil {
-		return "", "", err
+func (s *Service) performCapture(targetURL string) (data []byte, err error) {
+	select {
+	case s.sem <- struct{}{}:
+		defer func() { <-s.sem }()
+	case <-s.ctx.Done():
+		return nil, s.ctx.Err()
 	}
-	apiToken, err := s.db.GetSetting("cloudflare_api_token")
-	if err != nil {
-		return "", "", err
+
+	bURL, token, err := s.loadCredentials()
+	if err != nil || bURL == "" {
+		return nil, fmt.Errorf("browserless credentials missing from settings")
 	}
-	return accountID, apiToken, nil
+
+	controlURL, err := s.buildBrowserlessURL(bURL, token)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build browserless URL: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(s.ctx, 120*time.Second)
+	defer cancel()
+
+	type result struct {
+		data []byte
+		err  error
+	}
+	resChan := make(chan result, 1)
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				resChan <- result{err: fmt.Errorf("browser driver panic: %v", r)}
+			}
+		}()
+		captureData, captureErr := s.executeCapture(ctx, controlURL, targetURL)
+		resChan <- result{data: captureData, err: captureErr}
+	}()
+
+	select {
+	case res := <-resChan:
+		return res.data, res.err
+	case <-ctx.Done():
+		return nil, fmt.Errorf("capture timeout: %w", ctx.Err())
+	}
+}
+
+func (s *Service) executeCapture(ctx context.Context, controlURL, targetURL string) ([]byte, error) {
+	browser := rod.New().ControlURL(controlURL).Context(ctx)
+	
+	if err := browser.Connect(); err != nil {
+		return nil, fmt.Errorf("browserless connection failed: %w", err)
+	}
+	defer browser.MustClose()
+
+	page, err := browser.Page(proto.TargetCreateTarget{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to open browser page: %w", err)
+	}
+	defer page.MustClose()
+
+	page.MustSetViewport(1280, 800, 1, false)
+
+	if err := page.Navigate(targetURL); err != nil {
+		return nil, fmt.Errorf("navigation failed: %w", err)
+	}
+
+	_ = rod.Try(func() {
+		page.MustWaitLoad().MustWaitIdle()
+	})
+
+	time.Sleep(2 * time.Second)
+
+	quality := 90
+	return page.Screenshot(false, &proto.PageCaptureScreenshot{
+		Format:  proto.PageCaptureScreenshotFormatPng,
+		Quality: &quality,
+	})
+}
+
+func (s *Service) buildBrowserlessURL(rawURL, token string) (string, error) {
+	rawURL = strings.TrimSpace(rawURL)
+	token = strings.TrimSpace(token)
+
+	if rawURL == "" || token == "" {
+		return "", fmt.Errorf("browserless credentials cannot be empty")
+	}
+
+	isSecure := strings.HasPrefix(rawURL, "https://") || strings.HasPrefix(rawURL, "wss://")
+	
+	cleanHost := rawURL
+	prefixes := []string{"https://", "http://", "wss://", "ws://"}
+	for _, p := range prefixes {
+		cleanHost = strings.TrimPrefix(cleanHost, p)
+	}
+	cleanHost = strings.TrimRight(cleanHost, "/")
+
+	scheme := "ws://"
+	if isSecure {
+		scheme = "wss://"
+	}
+
+	u, err := url.Parse(fmt.Sprintf("%s%s/chromium", scheme, cleanHost))
+	if err != nil {
+		return "", fmt.Errorf("invalid browserless url: %w", err)
+	}
+
+	q := u.Query()
+	q.Set("token", token)
+	q.Set("--disable-dev-shm-usage", "true")
+	q.Set("--no-sandbox", "true")
+	u.RawQuery = q.Encode()
+
+	return u.String(), nil
 }
 
 func (s *Service) resolveTargetURL(check models.Check) (string, error) {
 	if check.URL != "" {
-		parsed, err := url.Parse(check.URL)
-		if err != nil {
-			return "", fmt.Errorf("invalid url: %w", err)
-		}
-		if parsed.Scheme != "http" && parsed.Scheme != "https" {
-			return "", fmt.Errorf("snapshot supports http/https only")
-		}
-		if parsed.Host == "" {
-			return "", fmt.Errorf("url missing host")
-		}
-		return parsed.String(), nil
+		return check.URL, nil
 	}
 
 	if check.Type == models.CheckTypeTailscaleService && check.TailscaleServiceHost != "" {
-		if check.TailscaleServiceProtocol == "http" || check.TailscaleServiceProtocol == "https" {
-			portPart := ""
-			if check.TailscaleServicePort > 0 {
-				portPart = fmt.Sprintf(":%d", check.TailscaleServicePort)
-			}
-			path := check.TailscaleServicePath
-			if path == "" {
-				path = "/"
-			}
-			built := fmt.Sprintf("%s://%s%s%s", check.TailscaleServiceProtocol, check.TailscaleServiceHost, portPart, path)
-			parsed, err := url.Parse(built)
-			if err != nil {
-				return "", fmt.Errorf("invalid tailscale service url: %w", err)
-			}
-			if parsed.Host == "" {
-				return "", fmt.Errorf("tailscale service url missing host")
-			}
-			return parsed.String(), nil
+		port := check.TailscaleServicePort
+		if port == 0 {
+			port = 80
 		}
+		path := "/" + strings.TrimPrefix(check.TailscaleServicePath, "/")
+		return fmt.Sprintf("%s://%s:%d%s", check.TailscaleServiceProtocol, check.TailscaleServiceHost, port, path), nil
 	}
 
-	return "", fmt.Errorf("snapshot available only for http/https checks with a valid URL")
+	return "", fmt.Errorf("no valid URL or Tailscale host defined for check")
 }
 
-func (s *Service) captureSnapshot(checkID int64, targetURL, accountID, apiToken string) error {
-	ctx, cancel := context.WithTimeout(s.ctx, 45*time.Second)
-	defer cancel()
-
-	payload := map[string]interface{}{
-		"url": targetURL,
-		"gotoOptions": map[string]interface{}{
-			"waitUntil": "networkidle0",
-			"timeout":   45000,
-		},
-		"screenshotOptions": map[string]bool{
-			"omitBackground": true,
-		},
+func (s *Service) isTailscale(check models.Check) bool {
+	if check.Type == models.CheckTypeTailscaleService {
+		return true
 	}
+	
+	lowURL := strings.ToLower(check.URL)
+	lowHost := strings.ToLower(check.TailscaleServiceHost)
+	
+	return strings.Contains(lowURL, ".ts.net") || 
+		   strings.Contains(lowHost, ".ts.net") ||
+		   strings.HasPrefix(lowHost, "100.")
+}
 
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(payload); err != nil {
-		s.storeFailure(checkID, "", fmt.Sprintf("encode payload: %v", err))
-		return err
-	}
 
-	req, err := http.NewRequestWithContext(
-		ctx,
-		http.MethodPost,
-		fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/browser-rendering/screenshot", accountID),
-		&buf,
-	)
-	if err != nil {
-		s.storeFailure(checkID, "", fmt.Sprintf("build request: %v", err))
-		return err
-	}
-
-	req.Header.Set("Authorization", "Bearer "+apiToken)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := s.client.Do(req)
-	if err != nil {
-		s.storeFailure(checkID, "", fmt.Sprintf("request error: %v", err))
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		errMsg := fmt.Sprintf("cloudflare status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-		s.storeFailure(checkID, "", errMsg)
-		return errors.New(errMsg)
-	}
-
-	contentType := resp.Header.Get("Content-Type")
-	if !strings.HasPrefix(contentType, "image/") {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		errMsg := fmt.Sprintf("unexpected content type %s: %s", contentType, html.EscapeString(string(body)))
-		s.storeFailure(checkID, "", errMsg)
-		return errors.New(errMsg)
-	}
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		s.storeFailure(checkID, "", fmt.Sprintf("read response: %v", err))
-		return err
-	}
-
-	filePath := filepath.Join(s.screenshotDir, fmt.Sprintf("check_%d.png", checkID))
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
-		s.storeFailure(checkID, filePath, fmt.Sprintf("write file: %v", err))
-		return err
-	}
-
-	now := time.Now().UTC()
-	if err := s.db.UpsertCheckSnapshot(&models.CheckSnapshot{
-		CheckID:   checkID,
-		FilePath:  filePath,
-		TakenAt:   &now,
-		LastError: "",
-	}); err != nil {
-		return err
-	}
-
-	return nil
+func (s *Service) loadCredentials() (string, string, error) {
+	u, _ := s.db.GetSetting("browserless_url")
+	t, _ := s.db.GetSetting("browserless_token")
+	return u, t, nil
 }
 
 func (s *Service) storeFailure(checkID int64, filePath, message string) {
 	log.Printf("snapshot: check %d failed: %s", checkID, message)
-	existing, _ := s.db.GetCheckSnapshot(checkID)
-	snapshot := &models.CheckSnapshot{
+	_ = s.db.UpsertCheckSnapshot(&models.CheckSnapshot{
 		CheckID:   checkID,
 		FilePath:  filePath,
 		LastError: message,
-	}
-	if existing != nil {
-		if snapshot.FilePath == "" {
-			snapshot.FilePath = existing.FilePath
-		}
-		if existing.TakenAt != nil {
-			snapshot.TakenAt = existing.TakenAt
-		}
-	}
-	_ = s.db.UpsertCheckSnapshot(snapshot)
+	})
 	s.broadcastSnapshot(checkID)
 }
 
@@ -313,8 +312,7 @@ func (s *Service) broadcastSnapshot(checkID int64) {
 		return
 	}
 	check, err := s.db.GetCheck(checkID)
-	if err != nil || check == nil {
-		return
+	if err == nil && check != nil {
+		s.engine.BroadcastCheckSnapshot(*check)
 	}
-	s.engine.BroadcastCheckSnapshot(*check)
 }

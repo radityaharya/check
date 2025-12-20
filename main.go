@@ -63,6 +63,12 @@ func loadConfig() (*Config, error) {
 }
 
 func main() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Panic recovered in main: %v", r)
+		}
+	}()
+
 	flag.Parse()
 
 	config, err := loadConfig()
@@ -195,6 +201,7 @@ func main() {
 	router.HandleFunc("/api/settings/test-webhook", authManager.OptionalAuth(handlers.TestWebhook)).Methods("POST")
 	router.HandleFunc("/api/settings/test-gotify", authManager.OptionalAuth(handlers.TestGotify)).Methods("POST")
 	router.HandleFunc("/api/settings/test-tailscale", authManager.OptionalAuth(handlers.TestTailscale)).Methods("POST")
+	router.HandleFunc("/api/settings/test-browserless", authManager.OptionalAuth(handlers.TestBrowserless)).Methods("POST")
 	router.HandleFunc("/api/tailscale/devices", authManager.OptionalAuth(handlers.GetTailscaleDevices)).Methods("GET")
 	router.HandleFunc("/api/groups", authManager.OptionalAuth(handlers.GetGroups)).Methods("GET")
 	router.HandleFunc("/api/groups", authManager.OptionalAuth(handlers.CreateGroup)).Methods("POST")

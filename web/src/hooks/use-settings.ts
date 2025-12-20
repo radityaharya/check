@@ -42,6 +42,19 @@ async function testTailscale(): Promise<{ device_count: number }> {
   return response.json();
 }
 
+async function testBrowserless(url: string): Promise<Blob> {
+  const response = await fetch('/api/settings/test-browserless', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+  if (!response.ok) {
+    const data = await response.json();
+    throw new Error(data.error || 'Failed to test Browserless');
+  }
+  return response.blob();
+}
+
 // Tailscale Devices
 async function fetchTailscaleDevices(): Promise<TailscaleDevice[]> {
   const response = await fetch('/api/tailscale/devices');
@@ -132,6 +145,12 @@ export function useTestGotify() {
 export function useTestTailscale() {
   return useMutation({
     mutationFn: testTailscale,
+  });
+}
+
+export function useTestBrowserless() {
+  return useMutation({
+    mutationFn: testBrowserless,
   });
 }
 

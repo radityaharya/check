@@ -591,17 +591,17 @@ func (h *Handlers) GetSettings(w http.ResponseWriter, r *http.Request) {
 	gotifyToken, _ := h.db.GetSetting("gotify_token")
 	tailscaleAPIKey, _ := h.db.GetSetting("tailscale_api_key")
 	tailscaleTailnet, _ := h.db.GetSetting("tailscale_tailnet")
-	cloudflareAccountID, _ := h.db.GetSetting("cloudflare_account_id")
-	cloudflareAPIToken, _ := h.db.GetSetting("cloudflare_api_token")
+	browserlessURL, _ := h.db.GetSetting("browserless_url")
+	browserlessToken, _ := h.db.GetSetting("browserless_token")
 
 	settings := models.Settings{
-		DiscordWebhookURL:   webhookURL,
-		GotifyServerURL:     gotifyServerURL,
-		GotifyToken:         gotifyToken,
-		TailscaleAPIKey:     tailscaleAPIKey,
-		TailscaleTailnet:    tailscaleTailnet,
-		CloudflareAccountID: cloudflareAccountID,
-		CloudflareAPIToken:  cloudflareAPIToken,
+		DiscordWebhookURL: webhookURL,
+		GotifyServerURL:   gotifyServerURL,
+		GotifyToken:       gotifyToken,
+		TailscaleAPIKey:   tailscaleAPIKey,
+		TailscaleTailnet:  tailscaleTailnet,
+		BrowserlessURL:    browserlessURL,
+		BrowserlessToken:  browserlessToken,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -635,11 +635,11 @@ func (h *Handlers) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := h.db.SetSetting("cloudflare_account_id", settings.CloudflareAccountID); err != nil {
+	if err := h.db.SetSetting("browserless_url", settings.BrowserlessURL); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := h.db.SetSetting("cloudflare_api_token", settings.CloudflareAPIToken); err != nil {
+	if err := h.db.SetSetting("browserless_token", settings.BrowserlessToken); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -654,7 +654,7 @@ func (h *Handlers) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	h.notifiers = notifiers
 	h.engine.UpdateNotifiers(notifiers)
 
-	if h.snapshotService != nil && settings.CloudflareAccountID != "" && settings.CloudflareAPIToken != "" {
+	if h.snapshotService != nil && settings.BrowserlessURL != "" && settings.BrowserlessToken != "" {
 		h.snapshotService.TriggerRefresh()
 	}
 
@@ -895,6 +895,43 @@ func (h *Handlers) TestTailscale(w http.ResponseWriter, r *http.Request) {
 		"message":      "Connected to Tailscale successfully",
 		"device_count": len(devices),
 	})
+}
+
+type TestBrowserlessRequest struct {
+	URL string `json:"url"`
+}
+
+func (h *Handlers) TestBrowserless(w http.ResponseWriter, r *http.Request) {
+	if h.snapshotService == nil {
+		http.Error(w, "snapshot service not available", http.StatusInternalServerError)
+		return
+	}
+
+	var req TestBrowserlessRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	if req.URL == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "url is required"})
+		return
+	}
+
+	data, err := h.snapshotService.TestSnapshot(req.URL)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/png")
+	w.Write(data)
 }
 
 func (h *Handlers) GetGroups(w http.ResponseWriter, r *http.Request) {

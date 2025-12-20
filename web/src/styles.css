@@ -30,7 +30,7 @@ code {
   --t-text: 15 23 42;
   --t-muted: 71 85 105;
   --t-green: 251 146 60;
-  --t-red: 243 139 168;
+  --t-red: 248 113 113;
   --t-yellow: 249 226 175;
   --t-blue: 122 162 247;
   --t-purple: 183 148 246;
@@ -82,7 +82,7 @@ code {
   --t-text: 229 231 239;
   --t-muted: 96 100 120;
   --t-green: 251 146 60;
-  --t-red: 243 139 168;
+  --t-red: 248 113 113;
   --t-yellow: 249 226 175;
   --t-blue: 122 162 247;
   --t-purple: 183 148 246;
@@ -227,7 +227,7 @@ code {
 }
 
 .glow-red {
-  box-shadow: 0 0 20px rgba(243, 139, 168, 0.3);
+  box-shadow: 0 0 20px rgba(248, 113, 113, 0.3);
 }
 
 /* Pulse animation */

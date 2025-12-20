@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ import {
   useTestDiscordWebhook,
   useTestGotify,
   useTestTailscale,
+  useTestBrowserless,
   useProbes,
 } from '@/hooks';
 import { useToast, ToastProvider } from '@/components/ui/toast';
@@ -195,12 +196,73 @@ interface SnapshotsTabProps {
   isSaving: boolean;
 }
 
-function SnapshotsTab({ onSave, isSaving }: SnapshotsTabProps) {
+function SnapshotsTab({ formData, updateField, onSave, isSaving }: SnapshotsTabProps) {
+  const { showToast } = useToast();
+  const testBrowserless = useTestBrowserless();
+  const [testURL, setTestURL] = useState('');
+  const [testImage, setTestImage] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (testImage) {
+        URL.revokeObjectURL(testImage);
+      }
+    };
+  }, [testImage]);
+
+  const handleTest = async () => {
+    if (!testURL.trim()) {
+      showToast('Please enter a URL to test', 'error');
+      return;
+    }
+    if (testImage) {
+      URL.revokeObjectURL(testImage);
+      setTestImage(null);
+    }
+    try {
+      const blob = await testBrowserless.mutateAsync(testURL.trim());
+      const imageUrl = URL.createObjectURL(blob);
+      setTestImage(imageUrl);
+      showToast('Screenshot captured successfully', 'success');
+    } catch (error: any) {
+      showToast(error.message || 'Failed to capture screenshot', 'error');
+      setTestImage(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="text-xs text-terminal-muted mb-4">
-        Configure snapshot settings for visual monitoring
+        Configure Browserless settings for visual monitoring snapshots
       </div>
+
+      <div className="space-y-4">
+        <div>
+          <label className="text-xs text-terminal-muted mb-1 block">Browserless URL</label>
+          <Input
+            type="text"
+            value={formData.browserless_url || ''}
+            onChange={(e) => updateField('browserless_url', e.target.value)}
+            placeholder="https://browserless.example.com or ws://localhost:8080"
+            className="bg-terminal-surface border-terminal-border text-terminal-text"
+          />
+          <div className="text-[10px] text-terminal-muted mt-1">
+            Use https:// for secure connections (converts to wss://) or ws:// for local/plain connections
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs text-terminal-muted mb-1 block">Browserless Token</label>
+          <Input
+            type="text"
+            value={formData.browserless_token || ''}
+            onChange={(e) => updateField('browserless_token', e.target.value)}
+            placeholder="Your Browserless authentication token"
+            className="bg-terminal-surface border-terminal-border text-terminal-text"
+          />
+        </div>
+      </div>
+
       <Button
         onClick={onSave}
         disabled={isSaving}
@@ -208,6 +270,46 @@ function SnapshotsTab({ onSave, isSaving }: SnapshotsTabProps) {
       >
         {isSaving ? <Spinner size="sm" /> : 'Save'}
       </Button>
+
+      <div className="border-t border-terminal-border pt-6 mt-6">
+        <div className="text-xs text-terminal-muted mb-4">
+          Test Browserless by capturing a screenshot from any URL
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs text-terminal-muted mb-1 block">Test URL</label>
+            <div className="flex gap-2">
+              <Input
+                type="text"
+                value={testURL}
+                onChange={(e) => setTestURL(e.target.value)}
+                placeholder="https://example.com"
+                className="flex-1 bg-terminal-surface border-terminal-border text-terminal-text"
+              />
+              <Button
+                onClick={handleTest}
+                disabled={testBrowserless.isPending || !testURL.trim()}
+                variant="outline"
+                className="bg-terminal-surface border-terminal-border"
+              >
+                {testBrowserless.isPending ? <Spinner size="sm" /> : 'Test'}
+              </Button>
+            </div>
+          </div>
+
+          {testImage && (
+            <div className="border border-terminal-border rounded bg-terminal-surface p-4">
+              <div className="text-xs text-terminal-muted mb-2">Screenshot Preview</div>
+              <img
+                src={testImage}
+                alt="Screenshot preview"
+                className="max-w-full h-auto rounded border border-terminal-border"
+              />
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -267,7 +267,7 @@ export function DetailsPane({
                 </div>
               ) : (
                 <div className="border border-terminal-border rounded bg-terminal-bg text-terminal-muted text-sm p-6">
-                  Snapshot pending. Configure Cloudflare credentials in settings to enable previews.
+                  Snapshot pending. Configure Browserless credentials in settings to enable previews.
                 </div>
               )}
               {check.snapshot_error && (

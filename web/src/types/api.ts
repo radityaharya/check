@@ -136,8 +136,8 @@ export interface Settings {
   gotify_token: string;
   tailscale_api_key: string;
   tailscale_tailnet: string;
-  cloudflare_account_id: string;
-  cloudflare_api_token: string;
+  browserless_url: string;
+  browserless_token: string;
 }
 
 export interface TailscaleDevice {
