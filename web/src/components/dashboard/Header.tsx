@@ -99,7 +99,7 @@ export function StatsGrid({ stats, isLoading }: StatsGridProps) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
       <StatCard label="total" value={stats.total_checks || 0} />
-      <StatCard label="active" value={stats.active_checks || 0} className="text-terminal-purple" />
+      <StatCard label="active" value={stats.active_checks || 0} className="text-terminal-green" />
       <StatCard label="up" value={stats.up_checks || 0} className="text-terminal-green" />
       <StatCard
         label="uptime"

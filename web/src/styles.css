@@ -24,12 +24,12 @@ code {
 
 :root {
   /* Terminal theme - Light mode */
-  --t-bg: 248 250 252;
-  --t-surface: 255 255 255;
-  --t-border: 226 232 240;
+  --t-bg: 250 247 240;
+  --t-surface: 255 253 250;
+  --t-border: 229 224 216;
   --t-text: 15 23 42;
   --t-muted: 71 85 105;
-  --t-green: 196 167 231;
+  --t-green: 251 146 60;
   --t-red: 243 139 168;
   --t-yellow: 249 226 175;
   --t-blue: 122 162 247;
@@ -76,12 +76,12 @@ code {
 
 .dark {
   /* Terminal theme - Dark mode */
-  --t-bg: 5 5 7;
-  --t-surface: 12 12 18;
-  --t-border: 21 21 32;
+  --t-bg: 6 5 4;
+  --t-surface: 10 9 8;
+  --t-border: 18 16 14;
   --t-text: 229 231 239;
   --t-muted: 96 100 120;
-  --t-green: 196 167 231;
+  --t-green: 251 146 60;
   --t-red: 243 139 168;
   --t-yellow: 249 226 175;
   --t-blue: 122 162 247;
